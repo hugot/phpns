@@ -1,0 +1,320 @@
+#!/bin/bash
+##
+# phpns - Resolve namespaces and fix missing use statements in your PHP scripts.
+
+# shellcheck disable=SC2155
+declare SCRIPT_DIR="$(cd "$(dirname "$(readlink "${BASH_SOURCE[0]}" || echo "${BASH_SOURCE[0]}")")" && pwd)"
+declare CACHE_DIR=./.cache/phpns
+declare INFO=1
+
+
+[[ $DEBUG -eq 2 ]] && set -x
+shopt -s extglob
+shopt -so pipefail
+
+#shellcheck disable=SC1090
+include() {
+    source "$SCRIPT_DIR"/../lib/"${1}".bash
+}
+
+include handle_arguments
+include messaging
+include find_uses_and_needs
+
+read -rd '' USAGE <<'EOF'
+    phpns - Resolve namespaces and fix missing use statements in your PHP scripts.
+    
+    USAGE:
+        phpns COMMAND [ ARGUMENTS ] [ OPTIONS ]
+    
+    COMMANDS:
+        ns, namespace FILE : resolve the namespace of a file.
+        i, index : Index all php files in a project directory for usage.
+        fu, find-use CLASS_NAME : Find the use statement needed to import the provided class.
+        fxu, fix-uses FILE : Find all used classes that have no use statement in the provided file and add use statements for them.
+        cns, classes-in-namespace NAMESPACE: List all classes for a certain namespace
+        cmp, complete WORD: Complete paths to namespaces and classes that match WORD.
+
+    TO BE IMPLEMENTED:
+        rmuu, remove-unneeded-uses FILE: Remove all use statements for classes that are not being used.
+    
+    OPTIONS:
+        namespace: -
+        index: -
+        find-use:
+            -j, --json: Provide possible use paths as a json array.
+            -s --silent: Don't print info.
+            -p, --prefer-own: If there are matches inside the "src" dir, only use those.
+            -a, --auto-pick: Use first encountered match, don't provide a choice.
+            -b. --bare: Print use paths without any additives.
+        fix-uses:
+            -j, --json: Provide possible use paths per class as a json object.
+            -s --silent: Don't print info.
+            -p, --prefer-own: If there are matches inside the "src" dir, only use those.
+            -a, --auto-pick: Use first encountered match, for every class, don't provide a choice.
+            -o, --stdout: Print to stdout in stead of printing to a file.
+        complete:
+            -i, --be-smart: If word is a class name and no namespaces match, provide the use path for the class that matches WORD.
+        
+EOF
+
+execute() {
+    declare command="$1" INFO="$INFO"
+    declare -a CONFIG=()
+    shift
+
+    if [[ $command == @(-h|--help|help) ]]; then
+        echo "$USAGE" >&2
+        exit 0
+    fi
+
+    if ! [[ -f ./composer.json ]] && ! [[ -d ./.git ]]; then
+        echo "No composer.json or .git file found, not in root of poject, exiting." >&2
+        exit 1
+    fi
+
+    case "$command" in
+        ns | namespace)
+            checkCache
+            declare file="$1" cached_file="$CACHE_DIR/$1"
+
+            if [[ -f "$cached_file" ]]; then
+                grep 'namespace' "$cached_file" | sed 's/namespace\s*//; s/;$//;'
+            elif [[ -f "$file" ]]; then
+                grep 'namespace' "$file" | sed 's/namespace\s*//; s/;$//;'
+            else
+                declare namespace="${file#/*}"
+                namespace="${namespace#src/}"
+                namespace="${namespace//\//\\}"
+                echo "$namespace"
+            fi
+            ;;
+        i | index)
+            [[ -f ./composer.json ]] || exit 1
+            [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
+            rm -rf "${CACHE_DIR:?}"/*
+            grep -r '^\(class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir=.cache --include='*.php' | fillUseIndex
+            ;;
+        fu | find-use)
+            checkCache
+            handleArguments find-use "$@" || return $?
+            declare use_path='' class_name="${CONFIG[$CLASS_NAME]}"
+            if [[ "$class_name" == @(array|string|float|int) ]]; then
+                infof 'Type "%s" is not a class, but a primitive type.\n' "$class_name" >&2
+                return 1
+            fi
+
+            if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
+                declare -a files=($(grep -rl '\(class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR/src"))
+            else
+                declare -a files=($(grep -rl '\(class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR"))
+            fi
+            declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$CACHE_DIR/}"; done))
+
+            if [[ ${#presentable_files[@]} -eq 1 ]]; then
+                use_path="$(getUsePath "${presentable_files[0]}" "$class_name")"
+            elif [[ ${#presentable_files[@]} -eq 0 ]]; then
+                if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
+                    CONFIG[$PREFER_OWN]=
+                    execute fu "${CONFIG[@]}"
+                else
+                    infof 'No match found for class "%s"\n' "$class_name" >&2
+                    [[ ${CONFIG[$JSON]} == '--json' ]] && printf '[]'
+                fi
+                return 1
+            else
+                _handle_multiple_uses
+            fi
+
+            infof 'Found use statement for "%s"\n' "$use_path" >&2
+            if [[ ${CONFIG[$JSON]} == '--json' ]]; then
+                echo '['
+                echo "$use_path"
+                printf ']'
+            elif [[ ${CONFIG[$BARE]} ]]; then
+                echo "$use_path"
+            else
+                echo "use $use_path;"
+            fi
+            ;;
+        fxu | fix-uses)
+            checkCache
+            handleArguments fix-uses "$@" || return $?
+            declare file="$1"
+            if [[ ${CONFIG[$STDOUT]} == '--stdout' ]]; then
+                fixMissingUseStatements "$file"
+            else
+                # shellcheck disable=SC2005
+                echo "$(fixMissingUseStatements "$file")" > "$file"
+            fi
+            ;;
+        cnm | classes-in-namespace)
+            debug "Checking for namespace $1"
+            # shellcheck disable=SC2155
+            declare matching_files="$(grep -r 'namespace[[:blank:]]\+'"${1//\\/\\\\}"'[[:blank:]]*;' --files-with-matches -m 1 "$CACHE_DIR")"
+            debug "Matching files: $matching_files"
+            declare dir="${matching_files%%/+([^/]).php*}"
+            debug "Searching dir: $dir"
+            [[ -z $dir ]] && return 1
+            grep -hPod skip '(?<=class|interface|trait)[[:blank:]]+[A-Za-z]+' "$dir"/*
+            ;;
+        cmp | complete)
+            handleArguments complete "$@" || return $?
+            declare match='false' word="${CONFIG[$WORD]}"
+            if grep -rhPom 1 '(?<=namespace)[[:blank:]]+'"${word//\\/\\\\}"'[A-Za-z]*' "$CACHE_DIR" \
+                | sort -u; then
+                match='true'
+            fi
+
+            declare cur_namespace="${word%\\*([^\\])}" 
+            debugf 'checking namespace "%s"' "$cur_namespace"
+            if compgen -P "$cur_namespace\\" -W "$(execute cnm "$cur_namespace")" "${word##*\\}"; then
+                match='true'
+            fi
+
+            if ! $match && [[ ${CONFIG[$BE_SMART]} == '--be-smart' ]] && [[ $word == +([A-Za-z]) ]]; then
+                declare -a possibilities=()
+                possibilities=($(execute fu --prefer-own --silent --bare "$word"))
+                if [[ ${#possibilities[@]} -gt 1 ]]; then
+                    echo "$word"
+                fi
+                printf '%s\n' "${possibilities[@]}"
+
+            fi
+            ;;
+        *)
+            printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2
+            exit 1
+            ;;
+    esac
+}
+
+fillUseIndex() {
+    declare -A files=()
+    while IFS=':' read -ra line; do
+        declare file="$CACHE_DIR/${line[0]}"
+        declare dir="${file%/*}"
+
+        [[ -d "$dir" ]] || mkdir -p "$dir"
+        echo "${line[1]}" >> "$file"
+        files["${line[0]}"]='indexed'
+        if [[ $((${#files[@]}%500)) == 0 ]]; then
+            info "indexed ${#files[@]} files."
+        fi
+    done
+    
+    info "Finished indexing. Indexed ${#files[@]} files." >&2
+}
+
+# shellcheck disable=SC2034
+fixMissingUseStatements() {
+    declare check_uses='false' check_needs='false' file="$1"
+    declare -A uses=() needs=() namespace=()
+    declare -a classes=()
+    
+    classes=($(execute cnm "$(execute ns "$file")"))
+    for class in "${classes[@]}"; do
+        namespace["$class"]='in_namespace'
+    done
+
+    findUsesAndNeeds < "$file"
+    addUseStatements "${!needs[@]}" < "$file"
+}
+
+
+addUseStatements() {
+    declare -a needs=("$@")
+    declare use_statements=''
+    if [[ ${CONFIG[$JSON]} == '--json' ]]; then
+        declare -i length="$((${#needs[@]}-1))" current=0
+        echo '{'
+        for needed in "${needs[@]}"; do
+            printf '"%s": ' "$needed"
+            execute fu --json "$needed" "${CONFIG[$PREFER_OWN]}" "${CONFIG[$AUTO_PICK]}"
+            [[ $((current++)) -lt $length ]] && printf ','
+            echo
+        done
+        echo '}'
+
+        return 0
+    fi
+
+    while IFS='' read -r line; do
+        echo "$line"
+
+        if [[ $line == namespace* ]]; then
+            IFS='' read -r line && echo "$line"
+
+            use_statements="$(
+            for needed in "${needs[@]}"; do
+                execute fu "$needed" "${CONFIG[$PREFER_OWN]}" "${CONFIG[$AUTO_PICK]}"
+            done | sort
+            )"
+
+            [[ -n $use_statements ]] && echo "$use_statements"
+        fi
+    done
+
+    declare -i added_uses=0
+    added_uses="$(echo -n "$use_statements" | wc -l)"
+    [[ -n $use_statements ]] && ((added_uses++))
+    info "$added_uses use statements added out of ${#needs[@]} needed types. Types that were needed:" >&2
+    infof '           - "%s"\n' "${needs[@]}" >&2
+}
+
+_handle_multiple_uses() {
+    if [[ ${CONFIG[$AUTO_PICK]} == '--auto-pick' ]]; then
+        use_path="$(getUsePath "${files[0]}" "$class_name")"
+
+        return 0
+    elif [[ ${CONFIG[$BARE]} == '--bare' ]]; then
+        use_path="$(
+        for i in "${!files[@]}"; do
+            getUsePath "${files[$i]}" "$class_name"
+        done 
+        )"
+
+    elif [[ ${CONFIG[$JSON]} == '--json' ]]; then
+        use_path="$(
+        for i in "${!files[@]}"; do
+            getUsePath "${files[$i]}" "$class_name"
+            echo -n "$use_path"
+            [[ $i -lt $((${#files[@]}-1)) ]] && printf ','
+            echo
+        done 
+        )"
+        
+        return 0
+    else
+        infof 'Multiple matches for class "%s", please pick one file.\n' "$class_name" >&2
+
+        for i in "${!presentable_files[@]}"; do
+            presentable_files[$i]="${presentable_files[$i]} - $(execute ns "${presentable_files[$i]}")\\$class_name"
+        done
+
+        select file in "${presentable_files[@]}"; do
+            use_path="${file##*- }"
+            break
+        done < /dev/tty
+    fi
+}
+
+# shellcheck disable=SC2155
+getUsePath() {
+    declare file="$1" class_name="$2"
+    declare use_path="$(execute ns "$file")\\$class_name"
+    if [[ ${CONFIG[$JSON]} == '--json' ]]; then
+        printf '"%s"' "${use_path//\\/\\\\}"
+    else
+        echo "$use_path"
+    fi
+}
+
+checkCache() {
+    if ! [[ -d "$CACHE_DIR" ]]; then
+        info "No cache dir found, indexing." >&2
+        execute index
+    fi
+}
+
+execute "$@"
