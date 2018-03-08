@@ -90,7 +90,6 @@ execute() {
             fi
             ;;
         i | index)
-            [[ -f ./composer.json ]] || exit 1
             [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
             rm -rf "${CACHE_DIR:?}"/*
             grep -r '^\(class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir=.cache --include='*.php' | fillUseIndex
@@ -99,43 +98,12 @@ execute() {
             checkCache
             handleArguments find-use "$@" || return $?
             declare use_path='' class_name="${CONFIG[$CLASS_NAME]}"
-            if [[ "$class_name" == @(array|string|float|int) ]]; then
-                infof 'Type "%s" is not a class, but a primitive type.\n' "$class_name" >&2
+            if [[ "$class_name" == @(array|string|float|int|void|mixed) ]]; then
+                infof 'Type "%s" is not a class, but a primitive type.\n' "$class_name"
                 return 1
             fi
 
-            if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
-                declare -a files=($(grep -rl '\(class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR/src"))
-            else
-                declare -a files=($(grep -rl '\(class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR"))
-            fi
-            declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$CACHE_DIR/}"; done))
-
-            if [[ ${#presentable_files[@]} -eq 1 ]]; then
-                use_path="$(getUsePath "${presentable_files[0]}" "$class_name")"
-            elif [[ ${#presentable_files[@]} -eq 0 ]]; then
-                if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
-                    CONFIG[$PREFER_OWN]=
-                    execute fu "${CONFIG[@]}"
-                else
-                    infof 'No match found for class "%s"\n' "$class_name" >&2
-                    [[ ${CONFIG[$JSON]} == '--json' ]] && printf '[]'
-                fi
-                return 1
-            else
-                _handle_multiple_uses
-            fi
-
-            infof 'Found use statement for "%s"\n' "$use_path" >&2
-            if [[ ${CONFIG[$JSON]} == '--json' ]]; then
-                echo '['
-                echo "$use_path"
-                printf ']'
-            elif [[ ${CONFIG[$BARE]} ]]; then
-                echo "$use_path"
-            else
-                echo "use $use_path;"
-            fi
+            findUsePathForClass "$class_name"
             ;;
         fxu | fix-uses)
             checkCache
@@ -187,6 +155,84 @@ execute() {
             exit 1
             ;;
     esac
+}
+
+findUsePathForClass() {
+    declare class="$1"
+    if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
+        declare -a files=($(grep -rl '\(class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR/src"))
+    else
+        declare -a files=($(grep -rl '\(class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR"))
+    fi
+    declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$CACHE_DIR/}"; done))
+
+    if [[ ${#presentable_files[@]} -eq 1 ]]; then
+        use_path="$(getUsePath "${presentable_files[0]}" "$class_name")"
+    elif [[ ${#presentable_files[@]} -eq 0 ]]; then
+        _handle_no_use || return $?
+    else
+        _handle_multiple_uses
+    fi
+
+    infof 'Found use statement for "%s"\n' "$use_path" >&2
+    if [[ ${CONFIG[$JSON]} == '--json' ]]; then
+        echo '['
+        echo "$use_path"
+        printf ']'
+    elif [[ ${CONFIG[$BARE]} ]]; then
+        echo "$use_path"
+    else
+        echo "use $use_path;"
+    fi
+}
+
+_handle_no_use() {
+    if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
+        CONFIG[$PREFER_OWN]=
+        execute fu "${CONFIG[@]}"
+        return $?
+    else
+        infof 'No match found for class "%s"\n' "$class_name" >&2
+        [[ ${CONFIG[$JSON]} == '--json' ]] && printf '[]'
+    fi
+    return 1
+}
+
+_handle_multiple_uses() {
+    if [[ ${CONFIG[$AUTO_PICK]} == '--auto-pick' ]]; then
+        use_path="$(getUsePath "${files[0]}" "$class_name")"
+
+        return 0
+    elif [[ ${CONFIG[$BARE]} == '--bare' ]]; then
+        use_path="$(
+        for i in "${!files[@]}"; do
+            getUsePath "${files[$i]}" "$class_name"
+        done 
+        )"
+
+    elif [[ ${CONFIG[$JSON]} == '--json' ]]; then
+        use_path="$(
+        for i in "${!files[@]}"; do
+            getUsePath "${files[$i]}" "$class_name"
+            echo -n "$use_path"
+            [[ $i -lt $((${#files[@]}-1)) ]] && printf ','
+            echo
+        done 
+        )"
+        
+        return 0
+    else
+        infof 'Multiple matches for class "%s", please pick one file.\n' "$class_name" >&2
+
+        for i in "${!presentable_files[@]}"; do
+            presentable_files[$i]="${presentable_files[$i]} - $(execute ns "${presentable_files[$i]}")\\$class_name"
+        done
+
+        select file in "${presentable_files[@]}"; do
+            use_path="${file##*- }"
+            break
+        done < /dev/tty
+    fi
 }
 
 fillUseIndex() {
@@ -262,42 +308,6 @@ addUseStatements() {
     infof '           - "%s"\n' "${needs[@]}" >&2
 }
 
-_handle_multiple_uses() {
-    if [[ ${CONFIG[$AUTO_PICK]} == '--auto-pick' ]]; then
-        use_path="$(getUsePath "${files[0]}" "$class_name")"
-
-        return 0
-    elif [[ ${CONFIG[$BARE]} == '--bare' ]]; then
-        use_path="$(
-        for i in "${!files[@]}"; do
-            getUsePath "${files[$i]}" "$class_name"
-        done 
-        )"
-
-    elif [[ ${CONFIG[$JSON]} == '--json' ]]; then
-        use_path="$(
-        for i in "${!files[@]}"; do
-            getUsePath "${files[$i]}" "$class_name"
-            echo -n "$use_path"
-            [[ $i -lt $((${#files[@]}-1)) ]] && printf ','
-            echo
-        done 
-        )"
-        
-        return 0
-    else
-        infof 'Multiple matches for class "%s", please pick one file.\n' "$class_name" >&2
-
-        for i in "${!presentable_files[@]}"; do
-            presentable_files[$i]="${presentable_files[$i]} - $(execute ns "${presentable_files[$i]}")\\$class_name"
-        done
-
-        select file in "${presentable_files[@]}"; do
-            use_path="${file##*- }"
-            break
-        done < /dev/tty
-    fi
-}
 
 # shellcheck disable=SC2155
 getUsePath() {
