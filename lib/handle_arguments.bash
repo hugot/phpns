@@ -11,8 +11,7 @@ declare -gri BARE=5
 declare -gri WORD=6
 declare -gri BE_SMART=7
 
-handleArguments()
-{
+handleArguments() {
     declare -p CONFIG &>>/dev/null || return 1
     declare command="$1"
     shift
@@ -32,8 +31,7 @@ handleArguments()
     esac
 }
 
-_handle_fix_uses_arguments()
-{
+_handle_fix_uses_arguments() {
     declare arg="$1"
     while shift; do
         case "$arg" in
@@ -85,8 +83,7 @@ _handle_fix_uses_arguments()
 }
 
 # shellcheck disable=SC2034
-_handle_find_use_arguments()
-{
+_handle_find_use_arguments() {
     declare arg="$1"
     while shift; do
         case "$arg" in
@@ -137,8 +134,7 @@ _handle_find_use_arguments()
     done
 }
 
-_handle_complete_arguments()
-{
+_handle_complete_arguments() {
     declare arg="$1"
     while shift; do
         case "$arg" in

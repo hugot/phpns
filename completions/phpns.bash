@@ -1,5 +1,4 @@
-_phpns_complete () 
-{ 
+_phpns_complete() { 
     declare word="${COMP_WORDS[COMP_CWORD]}";
     case "${COMP_WORDS[1]}" in 
         cmp |complete)
@@ -26,8 +25,7 @@ _phpns_complete ()
     esac
 }
 
-__phpns_complete_complete()
-{
+__phpns_complete_complete() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
         '-')
@@ -42,8 +40,7 @@ __phpns_complete_complete()
     esac
 }
 
-__phpns_complete_fix_uses()
-{
+__phpns_complete_fix_uses() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in 
         '-')
@@ -58,8 +55,7 @@ __phpns_complete_fix_uses()
     esac
 }
 
-__phpns_complete_find_use()
-{
+__phpns_complete_find_use() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in 
         '-')
@@ -74,8 +70,7 @@ __phpns_complete_find_use()
     esac
 }
 
-__phpns_complete_use_path() 
-{
+__phpns_complete_use_path() {
     declare word="${COMP_WORDS[COMP_CWORD]}";
     if [[ $word == "'"* ]]; then
         word="${word//"'"/}"
