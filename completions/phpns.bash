@@ -10,6 +10,15 @@ _phpns_complete() {
         fu | find-use)
             __phpns_complete_find_use
             ;;
+        cns | classes-in-namespace)
+            __phpns_complete_classes_in_namespace
+            ;;
+        fp | filepath)
+            __phpns_complete_use_path
+            ;;
+        i | index)
+            COMPREPLY=(compgen -W '-s --silent' "${COMP_WORDS[COMP_CWORD]}" )
+            ;;
         "${COMP_WORDS[COMP_CWORD]}")
             declare -a commands=(
             'ns'  'namespace'
@@ -18,6 +27,7 @@ _phpns_complete() {
             'fxu' 'fix-uses'
             'cns' 'classes-in-namespace'
             'cmp' 'complete'
+            'fp'  'filepath'
             'help' 
             )
             COMPREPLY=($(compgen -W "${commands[*]}" "${COMP_WORDS[COMP_CWORD]}"))
@@ -29,10 +39,10 @@ __phpns_complete_complete() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
         '-')
-            COMPREPLY=($(compgen -P '-' -W 'i' "${word/-/}"))
+            COMPREPLY=($(compgen -P '-' -W 's e n' "${word/-/}"))
             ;;
         --*)
-            COMPREPLY=($(compgen -P '--' -W 'be-smart' "${word/--/}"))
+            COMPREPLY=($(compgen -P '--' -W 'silent expand-classes no-classes' "${word/--/}"))
             ;;
         *)
             __phpns_complete_use_path
@@ -70,17 +80,41 @@ __phpns_complete_find_use() {
     esac
 }
 
+__phpns_complete_classes_in_namespace() {
+    declare word="${COMP_WORDS[COMP_CWORD]}"
+    case "$word" in 
+        -*)
+            COMPREPLY=()
+            ;;
+        *)
+            __phpns_complete_namespace
+            ;;
+    esac
+}
+
 __phpns_complete_use_path() {
     declare word="${COMP_WORDS[COMP_CWORD]}";
     if [[ $word == "'"* ]]; then
         word="${word//"'"/}"
-        COMPREPLY=($(phpns cmp -i "${word//\\\\/\\}" | while read -r line; do echo "'$line'"; done))
+        COMPREPLY=($(phpns cmp -se "${word//\\\\/\\}" | while read -r line; do echo "'$line'"; done))
     elif [[ $word == '"' ]]; then
         word="${word//'"'/}"
-        COMPREPLY=($(phpns cmp -i "${word//\\\\/\\}" | while read -r line; do echo "\"${line//\\/\\\\}\""; done))
+        COMPREPLY=($(phpns cmp -se "${word//\\\\/\\}" | while read -r line; do echo "\"${line//\\/\\\\}\""; done))
     else
-        COMPREPLY=($(phpns cmp -i "${word//\\\\/\\}" | while read -r line; do echo "${line//\\/\\\\}"; done))
+        COMPREPLY=($(phpns cmp -se "${word//\\\\/\\}" | while read -r line; do echo "${line//\\/\\\\}"; done))
     fi
 }
 
+__phpns_complete_namespace() {
+    declare word="${COMP_WORDS[COMP_CWORD]}";
+    if [[ $word == "'"* ]]; then
+        word="${word//"'"/}"
+        COMPREPLY=($(phpns cmp -sn "${word//\\\\/\\}" | while read -r line; do echo "'$line'"; done))
+    elif [[ $word == '"' ]]; then
+        word="${word//'"'/}"
+        COMPREPLY=($(phpns cmp -sn "${word//\\\\/\\}" | while read -r line; do echo "\"${line//\\/\\\\}\""; done))
+    else
+        COMPREPLY=($(phpns cmp -sn "${word//\\\\/\\}" | while read -r line; do echo "${line//\\/\\\\}"; done))
+    fi
+}
 complete -o nospace -F _phpns_complete phpns

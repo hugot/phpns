@@ -7,7 +7,6 @@ declare SCRIPT_DIR="$(cd "$(dirname "$(readlink "${BASH_SOURCE[0]}" || echo "${B
 declare CACHE_DIR=./.cache/phpns
 declare INFO=1
 
-
 [[ $DEBUG -eq 2 ]] && set -x
 shopt -s extglob
 shopt -so pipefail
@@ -37,25 +36,27 @@ read -rd '' USAGE <<'EOF'
 
     TO BE IMPLEMENTED:
         rmuu, remove-unneeded-uses FILE: Remove all use statements for classes that are not being used.
+
+    OPTIONS FOR ALL COMMANDS:
+        -s --silent: Don't print info.
     
-    OPTIONS:
+    UNIQUE OPTIONS PER COMMAND:
         namespace: -
         index: -
         find-use:
             -j, --json: Provide possible use paths as a json array.
-            -s --silent: Don't print info.
             -p, --prefer-own: If there are matches inside the "src" dir, only use those.
             -a, --auto-pick: Use first encountered match, don't provide a choice.
             -b. --bare: Print use paths without any additives.
         fix-uses:
             -j, --json: Provide possible use paths per class as a json object.
-            -s --silent: Don't print info.
             -p, --prefer-own: If there are matches inside the "src" dir, only use those.
             -a, --auto-pick: Use first encountered match, for every class, don't provide a choice.
-            -o, --stdout: Print to stdout in stead of printing to a file.
+            -o, --stdout: Print to stdout in stead of printing to the selected file.
         complete:
-            -i, --be-smart: If word is a class name and no namespaces match, provide the use path for the class that matches WORD.
-        
+            -e, --expand-classes: If word is a class name and no namespaces match, provide the use path for the class that matches WORD.
+            -n, --no-classes: Only complete namespaces.
+
 EOF
 
 execute() {
@@ -82,14 +83,10 @@ execute() {
                 grep 'namespace' "$cached_file" | sed 's/namespace\s*//; s/;$//;'
             elif [[ -f "$file" ]]; then
                 grep 'namespace' "$file" | sed 's/namespace\s*//; s/;$//;'
-            else
-                declare namespace="${file#/*}"
-                namespace="${namespace#src/}"
-                namespace="${namespace//\//\\}"
-                echo "$namespace"
             fi
             ;;
         i | index)
+            handleArguments index "$@" || return $?
             [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
             rm -rf "${CACHE_DIR:?}"/*
             grep -r '^\(class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir=.cache --include='*.php' | fillUseIndex
@@ -116,31 +113,38 @@ execute() {
                 echo "$(fixMissingUseStatements "$file")" > "$file"
             fi
             ;;
-        cnm | classes-in-namespace)
-            debug "Checking for namespace $1"
+        cns | classes-in-namespace)
+            handleArguments classes-in-namespace "$@" || return $?
+            checkCache
+            debug "Checking for namespace ${CONFIG[$NAMESPACE]}"
+            declare namespace="${CONFIG[$NAMESPACE]}"
             # shellcheck disable=SC2155
-            declare matching_files="$(grep -r 'namespace[[:blank:]]\+'"${1//\\/\\\\}"'[[:blank:]]*;' --files-with-matches -m 1 "$CACHE_DIR")"
+            declare matching_files="$(grep -r 'namespace[[:blank:]]\+'"${namespace//\\/\\\\}"'[[:blank:]]*;' --files-with-matches -m 1 "$CACHE_DIR")"
             debug "Matching files: $matching_files"
             declare dir="${matching_files%%/+([^/]).php*}"
             debug "Searching dir: $dir"
             [[ -z $dir ]] && return 1
-            grep -hPod skip '(?<=class|interface|trait)[[:blank:]]+[A-Za-z]+' "$dir"/*
+            grep -hPod skip '(?<=class|interface|trait)[[:blank:]]+[A-Za-z]+' "$dir"/* \
+                | sed 's/^[[:blank:]]\+//g'
             ;;
         cmp | complete)
             handleArguments complete "$@" || return $?
+            checkCache
             declare match='false' word="${CONFIG[$WORD]}"
             if grep -rhPom 1 '(?<=namespace)[[:blank:]]+'"${word//\\/\\\\}"'[A-Za-z]*' "$CACHE_DIR" \
                 | sort -u; then
                 match='true'
             fi
 
-            declare cur_namespace="${word%\\*([^\\])}" 
-            debugf 'checking namespace "%s"' "$cur_namespace"
-            if compgen -P "$cur_namespace\\" -W "$(execute cnm "$cur_namespace")" "${word##*\\}"; then
-                match='true'
+            if ! [[ ${CONFIG[$NO_CLASSES]} == '--no-classes' ]]; then
+                declare cur_namespace="${word%\\*([^\\])}" 
+                debugf 'checking namespace "%s"' "$cur_namespace"
+                if compgen -P "$cur_namespace\\" -W "$(execute cns "$cur_namespace")" "${word##*\\}"; then
+                    match='true'
+                fi
             fi
 
-            if ! $match && [[ ${CONFIG[$BE_SMART]} == '--be-smart' ]] && [[ $word == +([A-Za-z]) ]]; then
+            if ! $match && [[ ${CONFIG[$EXPAND_CLASSES]} == '--expand-classes' ]] && [[ $word == +([A-Za-z]) ]]; then
                 declare -a possibilities=()
                 possibilities=($(execute fu --prefer-own --silent --bare "$word"))
                 if [[ ${#possibilities[@]} -gt 1 ]]; then
@@ -150,11 +154,35 @@ execute() {
 
             fi
             ;;
+        fp | filepath)
+            handleArguments filepath "$@" || return $?
+            checkCache
+            declare full_use_path="${CONFIG[$CLASS_PATH]}"
+            declare namespace="${full_use_path%\\*}"
+            declare class="${full_use_path##*\\}"
+            debugf 'namespace: "%s" class: "%s"\n' "$namespace" "$class"
+            (cd "$CACHE_DIR" && grep -rPzl "${namespace//\\/\\\\}"';\nclass '"$class"'(\s+|$)' src/)
+            ;;
         *)
             printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2
             exit 1
             ;;
     esac
+}
+
+# shellcheck disable=SC2034
+fixMissingUseStatements() {
+    declare check_uses='false' check_needs='false' file="$1"
+    declare -A uses=() needs=() namespace=()
+    declare -a classes=()
+    
+    classes=($(execute cns "$(execute ns "$file")"))
+    for class in "${classes[@]}"; do
+        namespace["$class"]='in_namespace'
+    done
+
+    findUsesAndNeeds < "$file"
+    addUseStatements "${!needs[@]}" < "$file"
 }
 
 findUsePathForClass() {
@@ -210,6 +238,7 @@ _handle_multiple_uses() {
         done 
         )"
 
+        return 0
     elif [[ ${CONFIG[$JSON]} == '--json' ]]; then
         use_path="$(
         for i in "${!files[@]}"; do
@@ -221,18 +250,17 @@ _handle_multiple_uses() {
         )"
         
         return 0
-    else
-        infof 'Multiple matches for class "%s", please pick one file.\n' "$class_name" >&2
-
-        for i in "${!presentable_files[@]}"; do
-            presentable_files[$i]="${presentable_files[$i]} - $(execute ns "${presentable_files[$i]}")\\$class_name"
-        done
-
-        select file in "${presentable_files[@]}"; do
-            use_path="${file##*- }"
-            break
-        done < /dev/tty
     fi
+
+    for i in "${!presentable_files[@]}"; do
+        presentable_files[$i]="${presentable_files[$i]} - $(execute ns "${presentable_files[$i]}")\\$class_name"
+    done
+
+    infof 'Multiple matches for class "%s", please pick one file.\n' "$class_name" >&2
+    select file in "${presentable_files[@]}"; do
+        use_path="${file##*- }"
+        break
+    done < /dev/tty
 }
 
 fillUseIndex() {
@@ -251,22 +279,6 @@ fillUseIndex() {
     
     info "Finished indexing. Indexed ${#files[@]} files." >&2
 }
-
-# shellcheck disable=SC2034
-fixMissingUseStatements() {
-    declare check_uses='false' check_needs='false' file="$1"
-    declare -A uses=() needs=() namespace=()
-    declare -a classes=()
-    
-    classes=($(execute cnm "$(execute ns "$file")"))
-    for class in "${classes[@]}"; do
-        namespace["$class"]='in_namespace'
-    done
-
-    findUsesAndNeeds < "$file"
-    addUseStatements "${!needs[@]}" < "$file"
-}
-
 
 addUseStatements() {
     declare -a needs=("$@")
@@ -307,7 +319,6 @@ addUseStatements() {
     info "$added_uses use statements added out of ${#needs[@]} needed types. Types that were needed:" >&2
     infof '           - "%s"\n' "${needs[@]}" >&2
 }
-
 
 # shellcheck disable=SC2155
 getUsePath() {
