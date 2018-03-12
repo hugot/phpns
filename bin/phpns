@@ -32,7 +32,7 @@ read -rd '' USAGE <<'EOF'
         fu, find-use CLASS_NAME : Find the use statement needed to import the provided class.
         fxu, fix-uses FILE : Find all used classes that have no use statement in the provided file and add use statements for them.
         cns, classes-in-namespace NAMESPACE: List all classes for a certain namespace
-        cmp, complete WORD: Complete paths to namespaces and classes that match WORD.
+        cmp, complete WORD: Complete FQN's for namespaces and classes that match WORD.
 
     TO BE IMPLEMENTED:
         rmuu, remove-unneeded-uses FILE: Remove all use statements for classes that are not being used.
@@ -44,18 +44,18 @@ read -rd '' USAGE <<'EOF'
         namespace: -
         index: -
         find-use:
-            -j, --json: Provide possible use paths as a json array.
+            -j, --json: Provide possible use FQN's as a json array.
             -p, --prefer-own: If there are matches inside the "src" dir, only use those.
             -a, --auto-pick: Use first encountered match, don't provide a choice.
-            -b. --bare: Print use paths without any additives.
+            -b. --bare: Print FQN's without any additives.
         fix-uses:
-            -j, --json: Provide possible use paths per class as a json object.
+            -j, --json: Provide possible use FQN's per class as a json object with the class names as keys.
             -p, --prefer-own: If there are matches inside the "src" dir, only use those.
             -a, --auto-pick: Use first encountered match, for every class, don't provide a choice.
             -o, --stdout: Print to stdout in stead of printing to the selected file.
         complete:
-            -e, --expand-classes: If word is a class name and no namespaces match, provide the use path for the class that matches WORD.
-            -n, --no-classes: Only complete namespaces.
+            -e, --expand-classes: If word is a class name and no namespaces match, provide the FQN for the class that matches WORD.
+            -n, --no-classes: Only complete FQN's for namespaces.
 
 EOF
 
