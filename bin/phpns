@@ -89,7 +89,7 @@ execute() {
             handleArguments index "$@" || return $?
             [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
             rm -rf "${CACHE_DIR:?}"/*
-            grep -r '^\(class\|abstract class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir={.cache,var} --include='*.php' | fillUseIndex
+            grep -r '^\(class\|abstract class\|final class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir={.cache,var} --include='*.php' | fillUseIndex
             ;;
         fu | find-use)
             checkCache
@@ -124,7 +124,7 @@ execute() {
             declare dir="${matching_files%%/+([^/]).php*}"
             debug "Searching dir: $dir"
             [[ -z $dir ]] && return 1
-            grep -hPod skip '(?<=class|abstract class|interface|trait)[[:blank:]]+[A-Za-z]+' "$dir"/* \
+            grep -hPod skip '(?<=class|abstract class|final class|interface|trait)[[:blank:]]+[A-Za-z]+' "$dir"/* \
                 | sed 's/^[[:blank:]]\+//g'
             ;;
         cmp | complete)
@@ -161,7 +161,7 @@ execute() {
             declare namespace="${full_use_path%\\*}"
             declare class="${full_use_path##*\\}"
             debugf 'namespace: "%s" class: "%s"\n' "$namespace" "$class"
-            (cd "$CACHE_DIR" && grep -rPzl "${namespace//\\/\\\\}"';\n(class|abstract class|interface) '"$class"'(\s+|$)' src/)
+            (cd "$CACHE_DIR" && grep -rPzl "${namespace//\\/\\\\}"';\n(class|abstract class|final class|interface) '"$class"'(\s+|$)' src/)
             ;;
         *)
             printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2
@@ -188,9 +188,9 @@ fixMissingUseStatements() {
 findUsePathForClass() {
     declare class="$1"
     if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
-        declare -a files=($(grep -rl '\(class\|abstract class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR/src"))
+        declare -a files=($(grep -rl '\(class\|final class\|abstract class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR/src"))
     else
-        declare -a files=($(grep -rl '\(class\|abstract class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR"))
+        declare -a files=($(grep -rl '\(class\|abstract class\|final class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR"))
     fi
     declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$CACHE_DIR/}"; done))
 
