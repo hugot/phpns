@@ -89,7 +89,7 @@ execute() {
             handleArguments index "$@" || return $?
             [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
             rm -rf "${CACHE_DIR:?}"/*
-            grep -r '^\(class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir=.cache --include='*.php' | fillUseIndex
+            grep -r '^\(class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir={.cache,var} --include='*.php' | fillUseIndex
             ;;
         fu | find-use)
             checkCache
