@@ -43,7 +43,8 @@ read -rd '' USAGE <<'EOF'
     
     UNIQUE OPTIONS PER COMMAND:
         namespace: -
-        index: -
+        index:
+            -d, --diff: Remove deleted files from index and index new files.
         find-use:
             -j, --json: Provide possible use FQN's as a json array.
             -p, --prefer-own: If there are matches inside the "src" dir, only use those.
