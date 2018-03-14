@@ -129,6 +129,18 @@ _handle_index_arguments() {
             -d | --diff)
                 CONFIG[$INDEX_DIFF]='--diff'
                 ;;
+            -*)
+                if [[ ${#arg} -gt 2 ]]; then
+                    declare -i i=1
+                    while [[ $i -lt ${#arg} ]]; do
+                        _handle_index_arguments "-${arg:$i:1}"
+                        ((i++))
+                    done
+                else
+                    printf 'Unknown option: "%s"\n' "${arg}" >&2
+                    return 1
+                fi
+                ;;
             *)
                 printf 'Unexpected argument: "%s"\n' "$arg" >&2
                 return 1
