@@ -17,7 +17,7 @@ _phpns_complete() {
             __phpns_complete_use_path
             ;;
         i | index)
-            COMPREPLY=(compgen -W '-s --silent' "${COMP_WORDS[COMP_CWORD]}" )
+            __phpns_complete_index
             ;;
         "${COMP_WORDS[COMP_CWORD]}")
             declare -a commands=(
@@ -31,6 +31,18 @@ _phpns_complete() {
             'help' 
             )
             COMPREPLY=($(compgen -W "${commands[*]}" "${COMP_WORDS[COMP_CWORD]}"))
+            ;;
+    esac
+}
+
+__phpns_complete_index() {
+    declare word="${COMP_WORDS[COMP_CWORD]}"
+    case "$word" in
+        '-')
+            COMPREPLY=($(compgen -P '-' -W 's d' "${word/-/}"))
+            ;;
+        --*)
+            COMPREPLY=($(compgen -P '--' -W 'silent diff' "${word/--/}"))
             ;;
     esac
 }

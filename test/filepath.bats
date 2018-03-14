@@ -7,7 +7,7 @@ setup() {
 
 @test "Outputs filename for a class" {
     declare expected='src/Entity/Post.php'
-    run phpns filepath App\\Entity\\Post
+    run phpns filepath --silent App\\Entity\\Post
     
     echo "output = $output"
     [[ "$output" == "$expected" ]]

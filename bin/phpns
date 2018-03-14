@@ -19,6 +19,7 @@ include() {
 include handle_arguments
 include messaging
 include find_uses_and_needs
+include index
 
 read -rd '' USAGE <<'EOF'
     phpns - Resolve namespaces and fix missing use statements in your PHP scripts.
@@ -88,8 +89,36 @@ execute() {
         i | index)
             handleArguments index "$@" || return $?
             [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
-            rm -rf "${CACHE_DIR:?}"/*
-            grep -r '^\(class\|abstract class\|final class\|namespace\|interface\|trait\) [A-Za-z]\+' -m 2 --exclude-dir={.cache,var} --include='*.php' | fillUseIndex
+
+            # The arguments to grep need to be dynamic here, because the diff option
+            # requires different arguments to be passed to grep.
+            declare -a grep_args=(
+                '^\(class\|abstract class\|final class\|namespace\|interface\|trait\) [A-Za-z]\+'
+                --exclude-dir={.cache,var}
+            )
+
+            # To exclusively index new files, add the filenames to the arguments array
+            if [[ ${CONFIG[$INDEX_DIFF]} == '--diff' ]]; then
+                declare -a files=()
+                files=($(diffIndex))
+                if [[ ${#files[@]} -eq 0 ]]; then
+                    info '0 new files indexed.'
+                    return 0
+                fi
+                grep_args=("${grep_args[@]}" "${files[@]}")
+            else
+                rm -rf "${CACHE_DIR:?}"/*
+                grep_args=("${grep_args[@]}" '-r' '--include=*.php')
+            fi
+
+            {
+                # Index matching files
+                grep -m 2 "${grep_args[@]}"
+
+                # Index non matching files to indicate that they have been parsed.
+                # This is necessary for the diff option to work
+                grep -lv "${grep_args[@]}" | while read -r line; do echo "$line:NO_NAMESPACE"; done
+            } | fillIndex
             ;;
         fu | find-use)
             checkCache
@@ -263,23 +292,6 @@ _handle_multiple_uses() {
     done < /dev/tty
 }
 
-fillUseIndex() {
-    declare -A files=()
-    while IFS=':' read -ra line; do
-        declare file="$CACHE_DIR/${line[0]}"
-        declare dir="${file%/*}"
-
-        [[ -d "$dir" ]] || mkdir -p "$dir"
-        echo "${line[1]}" >> "$file"
-        files["${line[0]}"]='indexed'
-        if [[ $((${#files[@]}%500)) == 0 ]]; then
-            info "indexed ${#files[@]} files."
-        fi
-    done
-    
-    info "Finished indexing. Indexed ${#files[@]} files." >&2
-}
-
 addUseStatements() {
     declare -a needs=("$@")
     declare use_statements=''
@@ -328,13 +340,6 @@ getUsePath() {
         printf '"%s"' "${use_path//\\/\\\\}"
     else
         echo "$use_path"
-    fi
-}
-
-checkCache() {
-    if ! [[ -d "$CACHE_DIR" ]]; then
-        info "No cache dir found, indexing." >&2
-        execute index
     fi
 }
 

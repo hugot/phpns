@@ -13,6 +13,7 @@ declare -gri EXPAND_CLASSES=7
 declare -gri NO_CLASSES=8
 declare -gri NAMESPACE=9
 declare -gri CLASS_PATH=10
+declare -gri INDEX_DIFF=11
 
 handleArguments() {
     declare -p CONFIG &>>/dev/null || return 1
@@ -124,6 +125,9 @@ _handle_index_arguments() {
         case "$arg" in
             -s | --silent)
                 INFO=0
+                ;;
+            -d | --diff)
+                CONFIG[$INDEX_DIFF]='--diff'
                 ;;
             *)
                 printf 'Unexpected argument: "%s"\n' "$arg" >&2
