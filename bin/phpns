@@ -34,6 +34,7 @@ read -rd '' USAGE <<'EOF'
         fxu, fix-uses FILE : Find all used classes that have no use statement in the provided file and add use statements for them.
         cns, classes-in-namespace NAMESPACE: List all classes for a certain namespace
         cmp, complete WORD: Complete FQN's for namespaces and classes that match WORD.
+        fp, filepath FQN: print the filepath of a class by the name of FQN.
 
     TO BE IMPLEMENTED:
         rmuu, remove-unneeded-uses FILE: Remove all use statements for classes that are not being used.
