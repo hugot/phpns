@@ -14,7 +14,7 @@ _phpns_complete() {
             __phpns_complete_classes_in_namespace
             ;;
         fp | filepath)
-            __phpns_complete_use_path
+            __phpns_complete_filepath
             ;;
         i | index)
             __phpns_complete_index
@@ -35,10 +35,25 @@ _phpns_complete() {
     esac
 }
 
+__phpns_complete_filepath() {
+    declare word="${COMP_WORDS[COMP_CWORD]}"
+    case "$word" in
+        -[^-] | -)
+            COMPREPLY=($(compgen -P '-' -W 's V' "${word/-/}"))
+            ;;
+        --*)
+            COMPREPLY=($(compgen -P '--' -W 'silent no-vendor' "${word/--/}"))
+            ;;
+        *)
+            __phpns_complete_use_path
+            ;;
+    esac
+}
+
 __phpns_complete_index() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
-        '-')
+        -[^-] | -)
             COMPREPLY=($(compgen -P '-' -W 's d' "${word/-/}"))
             ;;
         --*)
@@ -50,7 +65,7 @@ __phpns_complete_index() {
 __phpns_complete_complete() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
-        '-')
+        -[^-] | -)
             COMPREPLY=($(compgen -P '-' -W 's e n' "${word/-/}"))
             ;;
         --*)
@@ -65,7 +80,7 @@ __phpns_complete_complete() {
 __phpns_complete_fix_uses() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in 
-        '-')
+        -[^-] | -)
             COMPREPLY=($(compgen -P '-' -W 's p a j o' "${word/-/}"))
             ;;
         --*)
@@ -80,7 +95,7 @@ __phpns_complete_fix_uses() {
 __phpns_complete_find_use() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in 
-        '-')
+        -[^-] | -)
             COMPREPLY=($(compgen -P '-' -W 's b p a j' "${word/-/}"))
             ;;
         --*)

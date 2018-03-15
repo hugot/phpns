@@ -59,6 +59,8 @@ read -rd '' USAGE <<'EOF'
         complete:
             -e, --expand-classes: If word is a class name and no namespaces match, provide the FQN for the class that matches WORD.
             -n, --no-classes: Only complete FQN's for namespaces.
+        filepath:
+            -V, --no-vendor: Exclude vendor dir from search.
 
 EOF
 
@@ -192,7 +194,17 @@ execute() {
             declare namespace="${full_use_path%\\*}"
             declare class="${full_use_path##*\\}"
             debugf 'namespace: "%s" class: "%s"\n' "$namespace" "$class"
-            (cd "$CACHE_DIR" && grep -rPzl "${namespace//\\/\\\\}"';\n(class|abstract class|final class|interface) '"$class"'(\s+|$)' src/)
+
+            declare -a grep_args=(
+                -rPzl 
+                "${namespace//\\/\\\\}"';\n(class|abstract class|final class|interface) '"$class"'(\s+|$)'
+            )
+
+            if [[ ${CONFIG[$NO_VENDOR]} == '--no-vendor' ]]; then
+                grep_args=("${grep_args[@]}" --exclude-dir=vendor)
+            fi
+
+            (cd "$CACHE_DIR" && grep "${grep_args[@]}")
             ;;
         *)
             printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2

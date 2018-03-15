@@ -14,6 +14,7 @@ declare -gri NO_CLASSES=8
 declare -gri NAMESPACE=9
 declare -gri CLASS_PATH=10
 declare -gri INDEX_DIFF=11
+declare -gri NO_VENDOR=12
 
 handleArguments() {
     declare -p CONFIG &>>/dev/null || return 1
@@ -51,6 +52,9 @@ _handle_filepath_arguments() {
         case "$arg" in
             -s | --silent)
                 INFO=0
+                ;;
+            -V | --no-vendor)
+                CONFIG[$NO_VENDOR]='--no-vendor'
                 ;;
             --*)
                 printf 'Unknown option: "%s"\n' "${arg}" >&2
