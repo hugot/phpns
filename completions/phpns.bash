@@ -66,10 +66,10 @@ __phpns_complete_complete() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
         -[^-] | -)
-            COMPREPLY=($(compgen -P '-' -W 's e n' "${word/-/}"))
+            COMPREPLY=($(compgen -P '-' -W 's e n c' "${word/-/}"))
             ;;
         --*)
-            COMPREPLY=($(compgen -P '--' -W 'silent expand-classes no-classes' "${word/--/}"))
+            COMPREPLY=($(compgen -P '--' -W 'silent expand-classes no-classes complete-classses' "${word/--/}"))
             ;;
         *)
             __phpns_complete_use_path

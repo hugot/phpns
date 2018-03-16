@@ -3,8 +3,8 @@
 # Funtions that have to do with indexing a project
 
 diffIndex() {
-    (cd "$CACHE_DIR" && lsPhpRecursive "$CACHE_DIR") | findNonExistentFiles | (cd "$CACHE_DIR" && removeFiles)
-    lsPhpRecursive | (cd "$CACHE_DIR" && findNonExistentFiles)
+    (cd "$TREE_DIR" && lsPhpRecursive "$TREE_DIR") | findNonExistentFiles | (cd "$TREE_DIR" && removeFiles)
+    lsPhpRecursive | (cd "$TREE_DIR" && findNonExistentFiles)
 }
 
 lsPhpRecursive() {
@@ -29,25 +29,34 @@ removeFiles() {
 }
 
 checkCache() {
-    if ! [[ -d "$CACHE_DIR" ]]; then
+    if ! [[ -d "$TREE_DIR" ]]; then
         info "No cache dir found, indexing." >&2
         execute index
     fi
 }
 
 fillIndex() {
-    declare -A files=()
+    [[ -n $TREE_DIR ]] || return 1
+    [[ -n $CACHE_DIR ]] || return 1
+    [[ -n $CLASSES ]] || return 1
+    [[ -n $NAMESPACES ]] || return 1
+
     while IFS=':' read -ra line; do
-        declare file="$CACHE_DIR/${line[0]}"
+        declare file="$TREE_DIR/${line[0]}"
         declare dir="${file%/*}"
 
         [[ -d "$dir" ]] || mkdir -p "$dir"
         echo "${line[1]}" >> "$file"
-        files["${line[0]}"]='indexed'
-        if [[ $((${#files[@]}%500)) == 0 ]]; then
-            info "indexed ${#files[@]} files."
+        if [[ $((++lines%500)) -eq 0 ]]; then
+            info "indexed $lines lines."
         fi
     done
+
+    # Look up all namespaces for completion cache
+    grep -rPho '(?<=namespace) [A-Za-z_\\]+' "$TREE_DIR" | sed 's/^[[:blank:]]\+//g' | sort -u > "$NAMESPACES"
+
+    # Look up all classes for completion cache
+    grep -rPho '(?<=class) [A-Za-z_]+' "$TREE_DIR" | sed 's/^[[:blank:]]\+//g' | sort -u > "$CLASSES"
     
-    info "Finished indexing. Indexed ${#files[@]} files." >&2
+    info "Finished indexing. Indexed ${lines} lines." >&2
 }

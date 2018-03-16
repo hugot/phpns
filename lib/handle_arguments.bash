@@ -266,6 +266,9 @@ _handle_complete_arguments() {
             -n | --no-classes)
                 CONFIG[$NO_CLASSES]='--no-classes'
                 ;;
+            -c | --complete-classes)
+                CONFIG[$COMPLETE_CLASSES]='--complete-classes'
+                ;;
             -s | --silent)
                 INFO=0
                 ;;

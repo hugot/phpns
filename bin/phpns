@@ -5,6 +5,9 @@
 # shellcheck disable=SC2155
 declare SCRIPT_DIR="$(cd "$(dirname "$(readlink "${BASH_SOURCE[0]}" || echo "${BASH_SOURCE[0]}")")" && pwd)"
 declare CACHE_DIR=./.cache/phpns
+declare TREE_DIR="$CACHE_DIR/tree"
+declare CLASSES="$CACHE_DIR/classes"
+declare NAMESPACES="$CACHE_DIR/namespaces"
 declare INFO=1
 
 [[ $DEBUG -eq 2 ]] && set -x
@@ -57,8 +60,9 @@ read -rd '' USAGE <<'EOF'
             -a, --auto-pick: Use first encountered match, for every class, don't provide a choice.
             -o, --stdout: Print to stdout in stead of printing to the selected file.
         complete:
-            -e, --expand-classes: If word is a class name and no namespaces match, provide the FQN for the class that matches WORD.
+            -e, --expand-classes: If WORD is a class name and no namespaces match, provide the FQN for the class that matches WORD.
             -n, --no-classes: Only complete FQN's for namespaces.
+            -c, --complete-classes: If no namespaces match and WORD is not a class name, provide FQN's for all partially matching classes.
         filepath:
             -V, --no-vendor: Exclude vendor dir from search.
 
@@ -82,7 +86,7 @@ execute() {
     case "$command" in
         ns | namespace)
             checkCache
-            declare file="$1" cached_file="$CACHE_DIR/$1"
+            declare file="$1" cached_file="$TREE_DIR/$1"
 
             if [[ -f "$cached_file" ]]; then
                 grep 'namespace' "$cached_file" | sed 's/namespace\s*//; s/;$//;'
@@ -92,7 +96,7 @@ execute() {
             ;;
         i | index)
             handleArguments index "$@" || return $?
-            [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
+            [[ -d $TREE_DIR ]] || mkdir -p "$TREE_DIR"
 
             # The arguments to grep need to be dynamic here, because the diff option
             # requires different arguments to be passed to grep.
@@ -111,7 +115,7 @@ execute() {
                 fi
                 grep_args=("${grep_args[@]}" "${files[@]}")
             else
-                rm -rf "${CACHE_DIR:?}"/*
+                rm -rf "${TREE_DIR:?}"/*
                 grep_args=("${grep_args[@]}" '-r' '--include=*.php')
             fi
 
@@ -152,7 +156,7 @@ execute() {
             debug "Checking for namespace ${CONFIG[$NAMESPACE]}"
             declare namespace="${CONFIG[$NAMESPACE]}"
             # shellcheck disable=SC2155
-            declare matching_files="$(grep -r 'namespace[[:blank:]]\+'"${namespace//\\/\\\\}"'[[:blank:]]*;' --files-with-matches -m 1 "$CACHE_DIR")"
+            declare matching_files="$(grep -r 'namespace[[:blank:]]\+'"${namespace//\\/\\\\}"'[[:blank:]]*;' --files-with-matches -m 1 "$TREE_DIR")"
             debug "Matching files: $matching_files"
             declare dir="${matching_files%%/+([^/]).php*}"
             debug "Searching dir: $dir"
@@ -164,7 +168,9 @@ execute() {
             handleArguments complete "$@" || return $?
             checkCache
             declare match='false' word="${CONFIG[$WORD]}"
-            if grep -rhPom 1 '(?<=namespace)[[:blank:]]+'"${word//\\/\\\\}"'[A-Za-z]*' "$CACHE_DIR" \
+
+            # First look for matching namespaces
+            if grep -oP "^${word//\\/\\\\}"'(\\[A-Za-z_]+|[A-Za-z_]+)?' "$NAMESPACES" \
                 | sort -u; then
                 match='true'
             fi
@@ -180,11 +186,20 @@ execute() {
             if ! $match && [[ ${CONFIG[$EXPAND_CLASSES]} == '--expand-classes' ]] && [[ $word == +([A-Za-z]) ]]; then
                 declare -a possibilities=()
                 possibilities=($(execute fu --prefer-own --silent --bare "$word"))
-                if [[ ${#possibilities[@]} -gt 1 ]]; then
-                    echo "$word"
-                fi
-                printf '%s\n' "${possibilities[@]}"
 
+                if [[ ${#possibilities[@]} -eq 0 ]] && [[ ${CONFIG[$COMPLETE_CLASSES]} == '--complete-classes' ]]; then
+                    declare -a classes=()
+                    classes=($(grep "^${word}" "$CLASSES"))
+                    for class in "${classes[@]}"; do
+                        execute fu --prefer-own --silent --bare "$class"
+                    done
+
+                    [[ ${#classes[@]} -gt 1 ]] && echo "$word"
+                    return 0
+                fi
+
+                printf '%s\n' "${possibilities[@]}"
+                [[ ${#possibilities[@]} -gt 1 ]] && echo "$word"
             fi
             ;;
         fp | filepath)
@@ -204,7 +219,7 @@ execute() {
                 grep_args=("${grep_args[@]}" --exclude-dir=vendor)
             fi
 
-            (cd "$CACHE_DIR" && grep "${grep_args[@]}")
+            (cd "$TREE_DIR" && grep "${grep_args[@]}")
             ;;
         *)
             printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2
@@ -231,16 +246,18 @@ fixMissingUseStatements() {
 findUsePathForClass() {
     declare class="$1"
     if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
-        declare -a files=($(grep -rl '\(class\|final class\|abstract class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR/src"))
+        declare -a files=($(grep -rl '\(class\|final class\|abstract class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$TREE_DIR/src"))
     else
-        declare -a files=($(grep -rl '\(class\|abstract class\|final class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$CACHE_DIR"))
+        declare -a files=($(grep -rl '\(class\|abstract class\|final class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$TREE_DIR"))
     fi
-    declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$CACHE_DIR/}"; done))
+    declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$TREE_DIR/}"; done))
 
     if [[ ${#presentable_files[@]} -eq 1 ]]; then
         use_path="$(getUsePath "${presentable_files[0]}" "$class_name")"
+        debugf 'Single use path "%s" found' "$class_name"
     elif [[ ${#presentable_files[@]} -eq 0 ]]; then
-        _handle_no_use || return $?
+        _handle_no_use
+        return $?
     else
         _handle_multiple_uses
     fi
@@ -275,6 +292,8 @@ _handle_multiple_uses() {
 
         return 0
     elif [[ ${CONFIG[$BARE]} == '--bare' ]]; then
+        debug "Finding uses in  ${#files[@]} files:"
+        debugf '    - "%s"\n' "${files[@]}"
         use_path="$(
         for i in "${!files[@]}"; do
             getUsePath "${files[$i]}" "$class_name"
