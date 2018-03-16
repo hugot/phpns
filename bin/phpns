@@ -101,6 +101,7 @@ execute() {
             # The arguments to grep need to be dynamic here, because the diff option
             # requires different arguments to be passed to grep.
             declare -a grep_args=(
+                -H
                 '^\(class\|abstract class\|final class\|namespace\|interface\|trait\) [A-Za-z]\+'
                 --exclude-dir={.cache,var}
             )
