@@ -15,6 +15,7 @@ declare -gri NAMESPACE=9
 declare -gri CLASS_PATH=10
 declare -gri INDEX_DIFF=11
 declare -gri NO_VENDOR=12
+declare -gri INDEX_NEW=13
 
 handleArguments() {
     declare -p CONFIG &>>/dev/null || return 1
@@ -132,6 +133,9 @@ _handle_index_arguments() {
                 ;;
             -d | --diff)
                 CONFIG[$INDEX_DIFF]='--diff'
+                ;;
+            -N | --new)
+                CONFIG[$INDEX_NEW]='--new'
                 ;;
             -*)
                 if [[ ${#arg} -gt 2 ]]; then
@@ -268,6 +272,7 @@ _handle_complete_arguments() {
                 ;;
             -c | --complete-classes)
                 CONFIG[$COMPLETE_CLASSES]='--complete-classes'
+                CONFIG[$EXPAND_CLASSES]='--expand-classes'
                 ;;
             -s | --silent)
                 INFO=0

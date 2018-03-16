@@ -5,10 +5,17 @@
 # shellcheck disable=SC2155
 declare SCRIPT_DIR="$(cd "$(dirname "$(readlink "${BASH_SOURCE[0]}" || echo "${BASH_SOURCE[0]}")")" && pwd)"
 declare CACHE_DIR=./.cache/phpns
-declare TREE_DIR="$CACHE_DIR/tree"
+declare INFO=1
+
+# Cache locations
 declare CLASSES="$CACHE_DIR/classes"
 declare NAMESPACES="$CACHE_DIR/namespaces"
-declare INFO=1
+declare USES="$CACHE_DIR/uses"
+declare USES_LOOKUP="$CACHE_DIR/uses_lookup"
+declare USES_LOOKUP_OWN="$CACHE_DIR/uses_lookup_own"
+declare FILE_PATHS="$CACHE_DIR/file_paths"
+declare NAMESPACE_FILE_PATHS="$CACHE_DIR/namespace_file_paths"
+declare INDEXED="$CACHE_DIR/indexed"
 
 [[ $DEBUG -eq 2 ]] && set -x
 shopt -s extglob
@@ -86,12 +93,11 @@ execute() {
     case "$command" in
         ns | namespace)
             checkCache
-            declare file="$1" cached_file="$TREE_DIR/$1"
+            declare file="$1"
 
-            if [[ -f "$cached_file" ]]; then
-                grep 'namespace' "$cached_file" | sed 's/namespace\s*//; s/;$//;'
-            elif [[ -f "$file" ]]; then
-                grep 'namespace' "$file" | sed 's/namespace\s*//; s/;$//;'
+            # Try the index, if that doesn't work, attempt to extract the namespace from the file itself.
+            if ! grep "(?<=$file:).*" "$NAMESPACE_FILE_PATHS"; then
+                 grep -Po '(?<=^namespace[[:blank:]])[A-Za-z_\\]+' "$file"
             fi
             ;;
         i | index)
@@ -106,28 +112,52 @@ execute() {
                 --exclude-dir={.cache,var}
             )
 
-            # To exclusively index new files, add the filenames to the arguments array
-            if [[ ${CONFIG[$INDEX_DIFF]} == '--diff' ]]; then
-                declare -a files=()
-                files=($(diffIndex))
-                if [[ ${#files[@]} -eq 0 ]]; then
-                    info '0 new files indexed.'
-                    return 0
+            # Only index new files
+            if [[ ${CONFIG[$INDEX_NEW]} == '--new' ]]; then
+                declare -a new_files=() deleted_files=()
+                
+                # Extract new files from diff.
+                while IFS=':' read -ra diff_file; do
+                    if [[ ${diff_file[0]} == '-' ]]; then
+                        deleted_files=("${diff_file[1]}" "${deleted_files[@]}")
+                    elif [[ ${diff_file[0]} == '+' ]]; then
+                        new_files=("${diff_file[1]}" "${new_files[@]}")
+                    fi
+                done < <(diffIndex)
+
+                # Inform the user if non-existent files were found. Right now the only
+                # way to fix this is to reindex entirely.
+                if [[ ${#deleted_files[@]} -gt 0 ]]; then
+                    info "There are ${#deleted_files[@]} non-existent files in your index. Consider reindexing to prevent incorrect results."
+                    info 'Some of these none existent files are:'
+                    for i in {0..19}; do
+                        [[ $i -ge ${#deleted_files[@]} ]] && break
+                        infof '    - "%s"\n' "${deleted_files[$i]}"
+                    done
                 fi
-                grep_args=("${grep_args[@]}" "${files[@]}")
+
+                if [[ ${#new_files[@]} -eq 0 ]]; then
+                    info 'No new files were found.'
+                    return 0
+                else
+                    info "${#new_files[@]} new files found to index."
+                fi
+
+                # To exclusively index new files, add the filenames to the arguments array
+                grep_args=("${grep_args[@]}" "${new_files[@]}")
+            elif [[ ${CONFIG[$INDEX_DIFF]} == '--diff' ]]; then
+                diffIndex
+                return $?
             else
-                rm -rf "${TREE_DIR:?}"/*
                 grep_args=("${grep_args[@]}" '-r' '--include=*.php')
             fi
 
-            {
-                # Index matching files
-                grep -m 2 "${grep_args[@]}"
+            # Index matching files
+            grep -m 2 "${grep_args[@]}" | fillIndex
 
-                # Index non matching files to indicate that they have been parsed.
-                # This is necessary for the diff option to work
-                grep -lv "${grep_args[@]}" | while read -r line; do echo "$line:NO_NAMESPACE"; done
-            } | fillIndex
+            # Add non-matching files to the file with indexed files.
+            # This is necessary to be able to diff the index.
+            grep -L "${grep_args[@]}" >> "$INDEXED"
             ;;
         fu | find-use)
             checkCache
@@ -143,6 +173,7 @@ execute() {
         fxu | fix-uses)
             checkCache
             handleArguments fix-uses "$@" || return $?
+
             declare file="$1"
             if [[ ${CONFIG[$STDOUT]} == '--stdout' ]]; then
                 fixMissingUseStatements "$file"
@@ -154,34 +185,23 @@ execute() {
         cns | classes-in-namespace)
             handleArguments classes-in-namespace "$@" || return $?
             checkCache
-            debug "Checking for namespace ${CONFIG[$NAMESPACE]}"
-            declare namespace="${CONFIG[$NAMESPACE]}"
-            # shellcheck disable=SC2155
-            declare matching_files="$(grep -r 'namespace[[:blank:]]\+'"${namespace//\\/\\\\}"'[[:blank:]]*;' --files-with-matches -m 1 "$TREE_DIR")"
-            debug "Matching files: $matching_files"
-            declare dir="${matching_files%%/+([^/]).php*}"
-            debug "Searching dir: $dir"
-            [[ -z $dir ]] && return 1
-            grep -hPod skip '(?<=class|abstract class|final class|interface|trait)[[:blank:]]+[A-Za-z]+' "$dir"/* \
-                | sed 's/^[[:blank:]]\+//g'
+
+            declare namespace="${CONFIG[$NAMESPACE]}\\"
+            debug "Checking for namespace $namespace"
+
+            grep -Po "(?<=${namespace//\\/\\\\}).+" "$USES"
             ;;
         cmp | complete)
             handleArguments complete "$@" || return $?
             checkCache
-            declare match='false' word="${CONFIG[$WORD]}"
+            declare match='false' word="${CONFIG[$WORD]}" search_file="$USES"
 
-            # First look for matching namespaces
-            if grep -oP "^${word//\\/\\\\}"'(\\[A-Za-z_]+|[A-Za-z_]+)?' "$NAMESPACES" \
-                | sort -u; then
-                match='true'
+            if [[ ${CONFIG[$NO_CLASSES]} == '--no-classes' ]]; then
+                search_file="$NAMESPACES"
             fi
 
-            if ! [[ ${CONFIG[$NO_CLASSES]} == '--no-classes' ]]; then
-                declare cur_namespace="${word%\\*([^\\])}" 
-                debugf 'checking namespace "%s"' "$cur_namespace"
-                if compgen -P "$cur_namespace\\" -W "$(execute cns "$cur_namespace")" "${word##*\\}"; then
-                    match='true'
-                fi
+            if grep -oP "^${word//\\/\\\\}"'(\\[A-Za-z_]+|[A-Za-z_]+)?' "$search_file" | sort ; then
+                match='true'
             fi
 
             if ! $match && [[ ${CONFIG[$EXPAND_CLASSES]} == '--expand-classes' ]] && [[ $word == +([A-Za-z]) ]]; then
@@ -206,21 +226,13 @@ execute() {
         fp | filepath)
             handleArguments filepath "$@" || return $?
             checkCache
-            declare full_use_path="${CONFIG[$CLASS_PATH]}"
-            declare namespace="${full_use_path%\\*}"
-            declare class="${full_use_path##*\\}"
-            debugf 'namespace: "%s" class: "%s"\n' "$namespace" "$class"
 
-            declare -a grep_args=(
-                -rPzl 
-                "${namespace//\\/\\\\}"';\n(class|abstract class|final class|interface) '"$class"'(\s+|$)'
-            )
-
+            declare -a grep_args=(-Po "^.*(?=:${CONFIG[$CLASS_PATH]//\\/\\\\}$)" "$FILE_PATHS")
             if [[ ${CONFIG[$NO_VENDOR]} == '--no-vendor' ]]; then
                 grep_args=("${grep_args[@]}" --exclude-dir=vendor)
             fi
 
-            (cd "$TREE_DIR" && grep "${grep_args[@]}")
+            grep "${grep_args[@]}"
             ;;
         *)
             printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2
@@ -247,16 +259,15 @@ fixMissingUseStatements() {
 findUsePathForClass() {
     declare class="$1"
     if [[ ${CONFIG[$PREFER_OWN]} == '--prefer-own' ]]; then
-        declare -a files=($(grep -rl '\(class\|final class\|abstract class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$TREE_DIR/src"))
+        declare -a possibilities=($(grep -Po "(?<=^${CONFIG[$CLASS_NAME]}:).*" "$USES_LOOKUP_OWN"))
     else
-        declare -a files=($(grep -rl '\(class\|abstract class\|final class\|interface\|trait\)'"\\s\\+${CONFIG[$CLASS_NAME]}\(\\s\\+\|$\)" "$TREE_DIR"))
+        declare -a possibilities=($(grep -Po "(?<=^${CONFIG[$CLASS_NAME]}:).*" "$USES_LOOKUP"))
     fi
-    declare -a presentable_files=($(for f in "${files[@]}"; do echo "${f#$TREE_DIR/}"; done))
 
-    if [[ ${#presentable_files[@]} -eq 1 ]]; then
-        use_path="$(getUsePath "${presentable_files[0]}" "$class_name")"
+    if [[ ${#possibilities[@]} -eq 1 ]]; then
+        use_path="${possibilities[0]}"
         debugf 'Single use path "%s" found' "$class_name"
-    elif [[ ${#presentable_files[@]} -eq 0 ]]; then
+    elif [[ ${#possibilities[@]} -eq 0 ]]; then
         _handle_no_use
         return $?
     else
@@ -289,25 +300,20 @@ _handle_no_use() {
 
 _handle_multiple_uses() {
     if [[ ${CONFIG[$AUTO_PICK]} == '--auto-pick' ]]; then
-        use_path="$(getUsePath "${files[0]}" "$class_name")"
+        use_path="${possibilities[0]}"
 
         return 0
     elif [[ ${CONFIG[$BARE]} == '--bare' ]]; then
         debug "Finding uses in  ${#files[@]} files:"
         debugf '    - "%s"\n' "${files[@]}"
-        use_path="$(
-        for i in "${!files[@]}"; do
-            getUsePath "${files[$i]}" "$class_name"
-        done 
-        )"
+        use_path="$(printf '%s\n' "${possibilities[@]}")"
 
         return 0
     elif [[ ${CONFIG[$JSON]} == '--json' ]]; then
         use_path="$(
-        for i in "${!files[@]}"; do
-            getUsePath "${files[$i]}" "$class_name"
-            echo -n "$use_path"
-            [[ $i -lt $((${#files[@]}-1)) ]] && printf ','
+        for i in "${!possibilities[@]}"; do
+            echo -n "${possibilities[$i]}"
+            [[ $i -lt $((${#possibilities[@]}-1)) ]] && printf ','
             echo
         done 
         )"
@@ -315,13 +321,9 @@ _handle_multiple_uses() {
         return 0
     fi
 
-    for i in "${!presentable_files[@]}"; do
-        presentable_files[$i]="${presentable_files[$i]} - $(execute ns "${presentable_files[$i]}")\\$class_name"
-    done
-
-    infof 'Multiple matches for class "%s", please pick one file.\n' "$class_name" >&2
-    select file in "${presentable_files[@]}"; do
-        use_path="${file##*- }"
+    infof 'Multiple matches for class "%s", please pick one.\n' "$class_name" >&2
+    select match in "${possibilities[@]}"; do
+        use_path="$match"
         break
     done < /dev/tty
 }
@@ -364,17 +366,6 @@ addUseStatements() {
     [[ -n $use_statements ]] && ((added_uses++))
     info "$added_uses use statements added out of ${#needs[@]} needed types. Types that were needed:" >&2
     infof '           - "%s"\n' "${needs[@]}" >&2
-}
-
-# shellcheck disable=SC2155
-getUsePath() {
-    declare file="$1" class_name="$2"
-    declare use_path="$(execute ns "$file")\\$class_name"
-    if [[ ${CONFIG[$JSON]} == '--json' ]]; then
-        printf '"%s"' "${use_path//\\/\\\\}"
-    else
-        echo "$use_path"
-    fi
 }
 
 execute "$@"

@@ -2,61 +2,105 @@
 ##
 # Funtions that have to do with indexing a project
 
+##
+# This function outputs the difference between the files that are present in the
+# index and the files that are present in the project directory. The output format is:
+# +:NEW_FILE        (**Not in index but exists on disk**)
+# -:DELETED_FILE    (**In index but does not exist on disk**)
+##
 diffIndex() {
-    (cd "$TREE_DIR" && lsPhpRecursive "$TREE_DIR") | findNonExistentFiles | (cd "$TREE_DIR" && removeFiles)
-    lsPhpRecursive | (cd "$TREE_DIR" && findNonExistentFiles)
+    diff --unchanged-line-format='' --new-line-format='+:%L' --old-line-format='-:%L' \
+        <(sort -u < "$INDEXED") \
+        <(find ./ -name '*.php' -type f | sed 's!^\./\|^./\(var\|.cache\|vendor/bin\)/.\+$!!g; /^[[:blank:]]*$/d' | sort)
 }
 
-lsPhpRecursive() {
-    find ./ -name '*.php' -not -empty -type f | grep -v '^./\(var\|.cache\|vendor/bin\)'
-}
-
-findNonExistentFiles() {
-    while read -r file; do
-        if ! [[ -f $file ]]; then
-            echo "$file"
-        fi
-    done
-}
-
-removeFiles() {
-    declare -i removed=0
-    while read -r file; do
-        rm "$file"
-        ((removed++))
-    done
-    info "$removed files removed from index."
-}
-
-checkCache() {
-    if ! [[ -d "$TREE_DIR" ]]; then
-        info "No cache dir found, indexing." >&2
-        execute index
-    fi
-}
-
+##
+# This function reads the output of a grep command with the option -H or
+# --with-filename enabled. The lines containing class and namespace declarations
+# will be parsed and added to the index.
+#
+# shellcheck disable=SC2153
+##
 fillIndex() {
-    [[ -n $TREE_DIR ]] || return 1
-    [[ -n $CACHE_DIR ]] || return 1
-    [[ -n $CLASSES ]] || return 1
-    [[ -n $NAMESPACES ]] || return 1
+    [[ -n $CACHE_DIR ]]            || return 1
+    [[ -n $CLASSES ]]              || return 1
+    [[ -n $NAMESPACES ]]           || return 1
+    [[ -n $USES ]]                 || return 1
+    [[ -n $USES_LOOKUP ]]          || return 1
+    [[ -n $FILE_PATHS ]]           || return 1
+    [[ -n $NAMESPACE_FILE_PATHS ]] || return 1
+    [[ -n $INDEXED ]]              || return 1
 
+    # Clean up index files if not diffing.
+    echo > "$NAMESPACES"
+    echo > "$CLASSES"
+    echo > "$USES"
+    echo > "$USES_LOOKUP"
+    echo > "$FILE_PATHS"
+    echo > "$USES_LOOKUP_OWN"
+    echo > "$NAMESPACE_FILE_PATHS"
+    echo > "$INDEXED"
+
+    declare -A namespaces=() classes=()
     while IFS=':' read -ra line; do
-        declare file="$TREE_DIR/${line[0]}"
-        declare dir="${file%/*}"
+        declare file="${line[0]}"
 
-        [[ -d "$dir" ]] || mkdir -p "$dir"
-        echo "${line[1]}" >> "$file"
+        # Save the namespace or class to add to the FQN cache later on.
+        if [[ "${line[1]}" =~ (class|trait|interface)[[:blank:]]+([A-Za-z_]+) ]]; then
+            classes[$file]="${BASH_REMATCH[2]}"
+        elif [[ "${line[1]}" =~ namespace[[:blank:]]+([A-Za-z_\\]+) ]]; then
+            namespaces[$file]="${BASH_REMATCH[1]}"
+        else 
+            debugf 'No class or namespace found in line "%s"' "${line[0]}"
+        fi
+
+        # Add filename to file with indexed filenames. This is required
+        # for diffing the index.
+        echo "$file" >> "$INDEXED"
+
         if [[ $((++lines%500)) -eq 0 ]]; then
             info "indexed $lines lines."
         fi
     done
 
-    # Look up all namespaces for completion cache
-    grep -rPho '(?<=namespace) [A-Za-z_\\]+' "$TREE_DIR" | sed 's/^[[:blank:]]\+//g' | sort -u > "$NAMESPACES"
+    # Fill up the index
+    declare -i uses=0
+    for file in "${!classes[@]}"; do
+        declare namespace="${namespaces[$file]}"
+        declare class="${classes[$file]}"
 
-    # Look up all classes for completion cache
-    grep -rPho '(?<=class) [A-Za-z_]+' "$TREE_DIR" | sed 's/^[[:blank:]]\+//g' | sort -u > "$CLASSES"
+        if [[ -z $class ]]; then
+            debugf 'Class is missing for file "%s"\n' "$file"
+            debugf 'Namespace: "%s"\n' "$namespace"
+            continue
+        fi
+
+        ((uses++))
+        [[ $((uses%500)) -eq 0 ]] && info "Found FQN's for $uses classes."
+
+        echo "$namespace"                >> "$NAMESPACES"
+        echo "$class"                    >> "$CLASSES"
+        echo "$namespace\\$class"        >> "$USES"
+        echo "$class:$namespace\\$class" >> "$USES_LOOKUP"
+        echo "$file:$namespace\\$class"  >> "$FILE_PATHS"
+        echo "$file:$namespace"          >> "$NAMESPACE_FILE_PATHS"
+
+        [[ $file != 'vendor/'* ]] && echo "$class:$namespace\\$class" >> "$USES_LOOKUP_OWN"
+
+    done
+
+    # This keeps the index of class names unique, so that completing class names takes as little
+    # time as possible.
+    # Use echo and a subshell here to prevent changing the file before the command is done.
+    # shellcheck disable=SC2005
+    echo  "$(sort -u < "$CLASSES")" > "$CLASSES"
     
-    info "Finished indexing. Indexed ${lines} lines." >&2
+    info "Finished indexing. Indexed ${lines} lines and found FQN's for $uses classes." >&2
+}
+
+checkCache() {
+    if ! [[ -d "$CACHE_DIR" ]]; then
+        info "No cache dir found, indexing." >&2
+        execute index
+    fi
 }

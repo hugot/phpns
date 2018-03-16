@@ -54,10 +54,10 @@ __phpns_complete_index() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
         -[^-] | -)
-            COMPREPLY=($(compgen -P '-' -W 's d' "${word/-/}"))
+            COMPREPLY=($(compgen -P '-' -W 'N s d' "${word/-/}"))
             ;;
         --*)
-            COMPREPLY=($(compgen -P '--' -W 'silent diff' "${word/--/}"))
+            COMPREPLY=($(compgen -P '--' -W 'new silent diff' "${word/--/}"))
             ;;
     esac
 }
