@@ -53,7 +53,7 @@ phpns - Resolve namespaces and fix missing use statements in your PHP scripts.
     UNIQUE OPTIONS PER COMMAND:
         namespace: -
         index:
-            -d, --diff: Show differences between the filed in the index and the project directory.
+            -d, --diff: Show differences between the files in the index and the files in the project directory.
             -N, --new: Only index new files
         find-use:
             -j, --json: Provide possible use FQN's as a json array.
