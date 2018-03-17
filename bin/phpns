@@ -71,8 +71,7 @@ read -rd '' USAGE <<'EOF'
             -e, --expand-classes: If WORD is a class name and no namespaces match, provide the FQN for the class that matches WORD.
             -n, --no-classes: Only complete FQN's for namespaces.
             -c, --complete-classes: If no namespaces match and WORD is not a class name, provide FQN's for all partially matching classes.
-        filepath:
-            -V, --no-vendor: Exclude vendor dir from search.
+        filepath: -
 
 EOF
 
@@ -234,12 +233,7 @@ execute() {
             handleArguments filepath "$@" || return $?
             checkCache
 
-            declare -a grep_args=(-Po "^.*(?=:${CONFIG[$CLASS_PATH]//\\/\\\\}$)" "$FILE_PATHS")
-            if [[ ${CONFIG[$NO_VENDOR]} == '--no-vendor' ]]; then
-                grep_args=("${grep_args[@]}" --exclude-dir=vendor)
-            fi
-
-            grep "${grep_args[@]}"
+            grep -Po "^.*(?=:${CONFIG[$CLASS_PATH]//\\/\\\\}$)" "$FILE_PATHS"
             ;;
         *)
             printf 'Command "%s" is not a valid phpns command.\n' "$command" >&2

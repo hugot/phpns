@@ -42,10 +42,10 @@ __phpns_complete_filepath() {
     declare word="${COMP_WORDS[COMP_CWORD]}"
     case "$word" in
         -[^-] | -)
-            COMPREPLY=($(compgen -P '-' -W 's V' "${word/-/}"))
+            COMPREPLY=($(compgen -P '-' -W 's' "${word/-/}"))
             ;;
         --*)
-            COMPREPLY=($(compgen -P '--' -W 'silent no-vendor' "${word/--/}"))
+            COMPREPLY=($(compgen -P '--' -W 'silent' "${word/--/}"))
             ;;
         *)
             __phpns_complete_use_path
