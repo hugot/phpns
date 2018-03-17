@@ -110,7 +110,7 @@ execute() {
             declare -a grep_args=(
                 -H
                 '^\(class\|abstract class\|final class\|namespace\|interface\|trait\) [A-Za-z]\+'
-                --exclude-dir={.cache,var}
+                --exclude-dir={.cache,var,./vendor/bin}
             )
 
             # Only index new files

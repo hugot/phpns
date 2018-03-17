@@ -10,7 +10,7 @@
 ##
 diffIndex() {
     diff --unchanged-line-format='' --new-line-format='+:%L' --old-line-format='-:%L' \
-        <(sort -u < "$INDEXED") \
+        <(sort -u < "$INDEXED" | sed '/^[[:blank:]]*$/d') \
         <(find ./ -name '*.php' -type f | sed 's!^\./\|^./\(var\|.cache\|vendor/bin\)/.\+$!!g; /^[[:blank:]]*$/d' | sort)
 }
 
@@ -30,6 +30,8 @@ fillIndex() {
     [[ -n $FILE_PATHS ]]           || return 1
     [[ -n $NAMESPACE_FILE_PATHS ]] || return 1
     [[ -n $INDEXED ]]              || return 1
+
+    [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
 
     # Clean up index files if not diffing.
     echo > "$NAMESPACES"
