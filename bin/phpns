@@ -110,7 +110,8 @@ execute() {
             declare -a grep_args=(
                 -H
                 '^\(class\|abstract class\|final class\|namespace\|interface\|trait\) [A-Za-z]\+'
-                --exclude-dir={.cache,var,./vendor/bin}
+                --exclude-dir={.cache,var}
+                --binary-files=without-match
             )
 
             # Only index new files
@@ -154,11 +155,11 @@ execute() {
             fi
 
             # Index matching files
-            grep -m 2 "${grep_args[@]}" | fillIndex
+            grep -m 2 "${grep_args[@]}" | grep -v '^vendor/bin' | fillIndex
 
             # Add non-matching files to the file with indexed files.
             # This is necessary to be able to diff the index.
-            grep -L "${grep_args[@]}" >> "$INDEXED"
+            grep -L "${grep_args[@]}" | grep -v '^vendor/bin' >> "$INDEXED"
             ;;
         fu | find-use)
             checkCache
