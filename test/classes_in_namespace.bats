@@ -6,10 +6,10 @@ setup() {
 }
 
 @test "Outputs classes in namespace" {
-    declare expected='Comment
-Post
-Tag
-User'
+    declare expected='Tag
+User
+Comment
+Post'
     run phpns cns --silent App\\Entity
 
     printf 'output: "%s"\n' "$output" >&2
