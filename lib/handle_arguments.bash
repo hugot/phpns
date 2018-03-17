@@ -16,6 +16,7 @@ declare -gri CLASS_PATH=10
 declare -gri INDEX_DIFF=11
 declare -gri NO_VENDOR=12
 declare -gri INDEX_NEW=13
+declare -gri FILE=14
 
 handleArguments() {
     declare -p CONFIG &>>/dev/null || return 1
@@ -63,6 +64,7 @@ _handle_filepath_arguments() {
                 ;;
             -*)
                 if [[ ${#arg} -gt 2 ]]; then
+                    
                     declare -i i=1
                     while [[ $i -lt ${#arg} ]]; do
                         _handle_filepath_arguments "-${arg:$i:1}"
@@ -137,6 +139,10 @@ _handle_index_arguments() {
             -N | --new)
                 CONFIG[$INDEX_NEW]='--new'
                 ;;
+            --*)
+                printf 'Unknown option: "%s"\n' "${arg}" >&2
+                return 1
+                ;;
             -*)
                 if [[ ${#arg} -gt 2 ]]; then
                     declare -i i=1
@@ -199,11 +205,11 @@ _handle_fix_uses_arguments() {
                 :
                 ;;
             *)
-                if [[ -n ${CONFIG[$CLASS_NAME]} ]]; then
+                if [[ -n ${CONFIG[$FILE]} ]]; then
                     printf 'Unexpected argument: "%s"\n' "$arg" >&2
                     return 1
                 fi
-                CONFIG[$CLASS_NAME]="$arg"
+                CONFIG[$FILE]="$arg"
         esac
         arg="$1"
     done

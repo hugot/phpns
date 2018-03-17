@@ -55,7 +55,8 @@ read -rd '' USAGE <<'EOF'
     UNIQUE OPTIONS PER COMMAND:
         namespace: -
         index:
-            -d, --diff: Remove deleted files from index and index new files.
+            -d, --diff: Show differences between the filed in the index and the project directory.
+            -N, --new: Only index new files
         find-use:
             -j, --json: Provide possible use FQN's as a json array.
             -p, --prefer-own: If there are matches inside the "src" dir, only use those.
@@ -174,8 +175,13 @@ execute() {
             checkCache
             handleArguments fix-uses "$@" || return $?
 
-            declare file="$1"
-            if [[ ${CONFIG[$STDOUT]} == '--stdout' ]]; then
+            declare file="${CONFIG[$FILE]}"
+
+            if ! [[ -f $file ]]; then
+                infof 'File "%s" does not exist or is not a regular file.\n' "$file"
+
+                return 1
+            elif [[ ${CONFIG[$STDOUT]} == '--stdout' ]]; then
                 fixMissingUseStatements "$file"
             else
                 # shellcheck disable=SC2005
@@ -266,7 +272,10 @@ findUsePathForClass() {
 
     if [[ ${#possibilities[@]} -eq 1 ]]; then
         use_path="${possibilities[0]}"
-        debugf 'Single use path "%s" found' "$class_name"
+        debugf 'Single use path "%s" found' "${possibilities[0]}"
+
+        # Provide an escaped string for json output if requested.
+        [[ ${CONFIG[$JSON]} == '--json' ]] && printf -v use_path '"%s"' "${use_path//\\/\\\\}"
     elif [[ ${#possibilities[@]} -eq 0 ]]; then
         _handle_no_use
         return $?
@@ -312,7 +321,7 @@ _handle_multiple_uses() {
     elif [[ ${CONFIG[$JSON]} == '--json' ]]; then
         use_path="$(
         for i in "${!possibilities[@]}"; do
-            echo -n "${possibilities[$i]}"
+            printf '"%s"' "${possibilities[$i]//\\/\\\\}"
             [[ $i -lt $((${#possibilities[@]}-1)) ]] && printf ','
             echo
         done 
