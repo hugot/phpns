@@ -313,8 +313,6 @@ _handle_multiple_uses() {
 
         return 0
     elif [[ ${CONFIG[$BARE]} == '--bare' ]]; then
-        debug "Finding uses in  ${#files[@]} files:"
-        debugf '    - "%s"\n' "${files[@]}"
         use_path="$(printf '%s\n' "${possibilities[@]}")"
 
         return 0
