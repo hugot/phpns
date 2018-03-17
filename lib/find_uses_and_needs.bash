@@ -34,7 +34,7 @@ findUsesAndNeeds() {
         fi
 
         if $check_needs; then
-            if [[ $line == *function* ]]; then
+            if [[ $line == *function*([[:space:]])*([[:alnum:]])\(* ]]; then
                 _check_function_needs "$line"
                 continue
             fi
@@ -44,7 +44,10 @@ findUsesAndNeeds() {
 }
 
 _check_function_needs() {
-    declare line="$1" function_declaration="$1"
+    # Strip everything up until function name and argument declaration.
+    declare line="${1#*function}" function_declaration="${1#*function}"
+
+    # Collect the entire argument declaration
     while [[ $line != *'{'* ]] && read -r line; do
         function_declaration="$function_declaration $line"
     done
