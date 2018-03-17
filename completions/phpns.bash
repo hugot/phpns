@@ -32,6 +32,9 @@ _phpns_complete() {
             )
             COMPREPLY=($(compgen -W "${commands[*]}" "${COMP_WORDS[COMP_CWORD]}"))
             ;;
+        *)
+            COMPREPLY=()
+            ;;
     esac
 }
 
@@ -114,11 +117,14 @@ __phpns_complete_classes_in_namespace() {
             COMPREPLY=()
             ;;
         *)
-            __phpns_complete_namespace
+            __phpns_complete_namespace_path
             ;;
     esac
 }
 
+##
+# Complete FQN's for classes.
+##
 __phpns_complete_use_path() {
     declare word="${COMP_WORDS[COMP_CWORD]}";
     if [[ $word == "'"* ]]; then
@@ -132,7 +138,29 @@ __phpns_complete_use_path() {
     fi
 }
 
-__phpns_complete_namespace() {
+##
+# Complete FQN's for classes, also provide completions for incomplete class names using phpns's
+# --complete-classes option.
+# Recommended for usage where it is possible to cycle through the provided completions
+# like readline with menu-complete enabled.
+##
+__phpns_complete_use_path_complete_classes() {
+    declare word="${COMP_WORDS[COMP_CWORD]}";
+    if [[ $word == "'"* ]]; then
+        word="${word//"'"/}"
+        COMPREPLY=($(phpns cmp -sc "${word//\\\\/\\}" | while read -r line; do echo "'$line'"; done))
+    elif [[ $word == '"' ]]; then
+        word="${word//'"'/}"
+        COMPREPLY=($(phpns cmp -sc "${word//\\\\/\\}" | while read -r line; do echo "\"${line//\\/\\\\}\""; done))
+    else
+        COMPREPLY=($(phpns cmp -sc "${word//\\\\/\\}" | while read -r line; do echo "${line//\\/\\\\}"; done))
+    fi
+}
+
+##
+# Complete FQN's for namespaces.
+##
+__phpns_complete_namespace_path() {
     declare word="${COMP_WORDS[COMP_CWORD]}";
     if [[ $word == "'"* ]]; then
         word="${word//"'"/}"
@@ -144,4 +172,5 @@ __phpns_complete_namespace() {
         COMPREPLY=($(phpns cmp -sn "${word//\\\\/\\}" | while read -r line; do echo "${line//\\/\\\\}"; done))
     fi
 }
-complete -o nospace -F _phpns_complete phpns
+
+complete -o nospace -o default -F _phpns_complete phpns
