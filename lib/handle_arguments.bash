@@ -275,7 +275,6 @@ _handle_complete_arguments() {
                 ;;
             -c | --complete-classes)
                 CONFIG[$COMPLETE_CLASSES]='--complete-classes'
-                CONFIG[$EXPAND_CLASSES]='--expand-classes'
                 ;;
             -s | --silent)
                 INFO=0

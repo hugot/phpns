@@ -210,23 +210,29 @@ execute() {
                 match='true'
             fi
 
+            declare -a possibilities=()
             if ! $match && [[ ${CONFIG[$EXPAND_CLASSES]} == '--expand-classes' ]] && [[ $word == +([A-Za-z]) ]]; then
-                declare -a possibilities=()
                 possibilities=($(execute fu --prefer-own --silent --bare "$word"))
 
-                if [[ ${#possibilities[@]} -eq 0 ]] && [[ ${CONFIG[$COMPLETE_CLASSES]} == '--complete-classes' ]]; then
-                    declare -a classes=()
-                    classes=($(grep "^${word}" "$CLASSES"))
-                    for class in "${classes[@]}"; do
-                        execute fu --prefer-own --silent --bare "$class"
-                    done
+                if [[ ${#possibilities[@]} -gt 0 ]]; then
+                    printf '%s\n' "${possibilities[@]}"
+                    [[ ${#possibilities[@]} -gt 1 ]] && echo "$word"
 
-                    [[ ${#classes[@]} -gt 1 ]] && echo "$word"
                     return 0
                 fi
+            fi
 
-                printf '%s\n' "${possibilities[@]}"
-                [[ ${#possibilities[@]} -gt 1 ]] && echo "$word"
+            if ! $match && [[ ${#possibilities[@]} -eq 0 ]] && [[ ${CONFIG[$COMPLETE_CLASSES]} == '--complete-classes' ]]; then
+                declare -a classes=()
+                classes=($(grep "^${word}" "$CLASSES"))
+
+                for class in "${classes[@]}"; do
+                    execute fu --prefer-own --silent --bare "$class"
+                done
+
+                [[ ${#classes[@]} -gt 1 ]] && echo "$word"
+
+                return 0
             fi
             ;;
         fp | filepath)
