@@ -200,6 +200,9 @@ execute() {
         cmp | complete)
             handleArguments complete "$@" || return $?
             checkCache
+
+            # Depending on the options, behaviour differs a lot here, but in any case,
+            # We want to stop when any matches have been found, hence the "match" variable.
             declare match='false' word="${CONFIG[$WORD]}" search_file="$USES"
 
             if [[ ${CONFIG[$NO_CLASSES]} == '--no-classes' ]]; then
@@ -210,30 +213,25 @@ execute() {
                 match='true'
             fi
 
-            declare -a possibilities=()
-            if ! $match && [[ ${CONFIG[$EXPAND_CLASSES]} == '--expand-classes' ]] && [[ $word == +([A-Za-z]) ]]; then
-                possibilities=($(execute fu --prefer-own --silent --bare "$word"))
+            # With the no-classes option enabled, completion stops here!
+            [[ ${CONFIG[$NO_CLASSES]} == '--no-classes' ]] && return
 
-                if [[ ${#possibilities[@]} -gt 0 ]]; then
-                    printf '%s\n' "${possibilities[@]}"
-                    [[ ${#possibilities[@]} -gt 1 ]] && echo "$word"
+            if ! $match; then
+                declare -a possibilities=()
 
-                    return 0
+                if [[ ${CONFIG[$EXPAND_CLASSES]} == '--expand-classes' ]] && [[ $word == +([A-Za-z]) ]]; then
+                    possibilities=($(execute fu --prefer-own --silent --bare "$word"))
+
+                    [[ ${#possibilities[@]} -gt 0 ]] && match='true'
+                fi
+
+                if ! $match && [[ ${#possibilities[@]} -eq 0 ]] && [[ ${CONFIG[$COMPLETE_CLASSES]} == '--complete-classes' ]]; then
+                    possibilities=($(awk -F ':' '/^'"${word}"'.*/{ print $2; }' "$USES_LOOKUP"))
                 fi
             fi
 
-            if ! $match && [[ ${#possibilities[@]} -eq 0 ]] && [[ ${CONFIG[$COMPLETE_CLASSES]} == '--complete-classes' ]]; then
-                declare -a classes=()
-                classes=($(grep "^${word}" "$CLASSES"))
-
-                for class in "${classes[@]}"; do
-                    execute fu --prefer-own --silent --bare "$class"
-                done
-
-                [[ ${#classes[@]} -gt 1 ]] && echo "$word"
-
-                return 0
-            fi
+            [[ ${#possibilities[@]} -gt 0 ]] && printf '%s\n' "${possibilities[@]}"
+            [[ ${#possibilities[@]} -gt 1 ]] && echo "$word"
             ;;
         fp | filepath)
             handleArguments filepath "$@" || return $?
