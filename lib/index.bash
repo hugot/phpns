@@ -95,7 +95,11 @@ fillIndex() {
     # time as possible.
     # Use echo and a subshell here to prevent changing the file before the command is done.
     # shellcheck disable=SC2005
-    echo  "$(sort -u < "$CLASSES")" > "$CLASSES"
+    echo "$(sort -u < "$CLASSES")" > "$CLASSES"
+
+    # Ditto for the namespaces index
+    # shellcheck disable=SC2005
+    echo "$(sort -u < "$NAMESPACES")" > "$NAMESPACES"
     
     info "Finished indexing. Indexed ${lines} lines and found FQN's for $uses classes." >&2
 }
