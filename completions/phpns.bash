@@ -72,7 +72,7 @@ __phpns_complete_complete() {
             COMPREPLY=($(compgen -P '-' -W 's e n c' "${word/-/}"))
             ;;
         --*)
-            COMPREPLY=($(compgen -P '--' -W 'silent expand-classes no-classes complete-classses' "${word/--/}"))
+            COMPREPLY=($(compgen -P '--' -W 'silent expand-classes no-classes complete-classes' "${word/--/}"))
             ;;
         *)
             __phpns_complete_expand_classes
