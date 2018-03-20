@@ -34,14 +34,16 @@ fillIndex() {
     [[ -d $CACHE_DIR ]] || mkdir -p "$CACHE_DIR"
 
     # Clean up index files if not diffing.
-    echo > "$NAMESPACES"
-    echo > "$CLASSES"
-    echo > "$USES"
-    echo > "$USES_LOOKUP"
-    echo > "$FILE_PATHS"
-    echo > "$USES_LOOKUP_OWN"
-    echo > "$NAMESPACE_FILE_PATHS"
-    echo > "$INDEXED"
+    if [[ ${CONFIG[$INDEX_NEW]} != '--new' ]]; then
+        echo > "$NAMESPACES"
+        echo > "$CLASSES"
+        echo > "$USES"
+        echo > "$USES_LOOKUP"
+        echo > "$FILE_PATHS"
+        echo > "$USES_LOOKUP_OWN"
+        echo > "$NAMESPACE_FILE_PATHS"
+        echo > "$INDEXED"
+    fi
 
     declare -A namespaces=() classes=()
     while IFS=':' read -ra line; do
