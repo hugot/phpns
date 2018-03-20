@@ -195,7 +195,7 @@ execute() {
             declare namespace="${CONFIG[$NAMESPACE]}\\"
             debug "Checking for namespace $namespace"
 
-            grep -Po "(?<=${namespace//\\/\\\\}).+" "$USES"
+            awk -F ':' "/:${namespace//\\/\\\\}"'[^\\]+$/{ print $1; }' "$USES_LOOKUP"
             ;;
         cmp | complete)
             handleArguments complete "$@" || return $?
