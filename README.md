@@ -13,7 +13,7 @@ namespaces and classes, and more!
 
 ### With basher
 The recommended way to install phpns is with [basher](https://github.com/basherpm/basher), the
-packge manager for bash. If installed correctly, basher will take care of adding argument completion
+package manager for bash. If installed correctly, basher will take care of adding argument completion
 for phpns to your shell and including the executable in your PATH. Basher will also make updating to
 the latest version trivial. You can install phpns with the following command:
 
@@ -94,7 +94,7 @@ phpns - Resolve namespaces and fix missing use statements in your PHP scripts.
 
 ### Integration with other programs
 A couple of phpns commands have a --json option, which will make them output information in JSON
-format, this might prove usefull if you are interested in integrating phpns with other applications.
+format, this might prove useful if you are interested in integrating phpns with other applications.
 Other commands will output data in a format that should be reasonably easy to parse, but if you do
 run into problems with that, please do not hesitate to open an issue or maybe even open a pull request
 so we can fix that problem for you.
@@ -109,7 +109,7 @@ current directory. These functions can also be used to complete FQN's for your o
 A thing that I find myself doing often on a day to day basis is opening php files from the command line. A function
 that makes this a little less cumbersome and verbose would be a welcome addition to my workflow, so let's create one!  
 I would like my function to be able to open files based on the FQN of the class that I provide as an argument. It is the classes
-that I work with after all, and their location on my filesystem is not my primary concern. To resolve a FQN of a class to
+that I work with after all, and their location on my file system is not my primary concern. To resolve a FQN of a class to
 the path of the file it was defined in, we can use the phpns `filepath` command. A bash function like this would do the
 trick for me in this case:
 
@@ -125,7 +125,7 @@ pvim() {
 ```
 
 This function will let me open the file in which the *App\Entity\Post* class is defined by typing
-`pvim 'App\Entity\Post'`. That is still a little too vermose for my liking though. I prefer to type
+`pvim 'App\Entity\Post'`. That is still a little too verbose for my liking though. I prefer to type
 as little as possible, so let's add some autocompletion to this function!
 
 ```bash
@@ -142,7 +142,7 @@ The `__phpns_complete_expand_classes` completes FQN's for classes if a full clas
 it would also be possible to use the `__phpns_complete_classes_expand_classes` function,
 which would also complete partially matching class names, but that would
 generate a lot of results, which bash's standard completion will not work well with.
-If you do choose this route, consider enabeling menu-completion for readline, as it will be a much
+If you do choose this route, consider enabling menu-completion for readline, as it will be a much
 better experience when using phpns in this way. To enable menu completion I use the following commands, 
 you could add these to your `bashrc` or `bash_aliases` if you would like this behaviour to be permanent.
 
@@ -150,4 +150,3 @@ you could add these to your `bashrc` or `bash_aliases` if you would like this be
 bind 'set show-all-if-ambiguous on'
 bind 'TAB:menu-complete'
 ```
-
