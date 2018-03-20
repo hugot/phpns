@@ -34,7 +34,7 @@ findUsesAndNeeds() {
         fi
 
         if $check_needs; then
-            if [[ $line == *function*([[:space:]])*([[:alnum:]])\(* ]]; then
+            if [[ $line == *function*([[:space:]])*([[:alnum:]_])\(* ]]; then
                 _check_function_needs "$line"
                 continue
             fi
