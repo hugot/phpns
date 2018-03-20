@@ -6,7 +6,7 @@ file and add missing use statements, complete Fully Qualified Names (FQN's) of
 namespaces and classes, and more!
 
 ## Phpns in action
-![phpns in action](https://cloud.hugot.nl/public/phpns/phpns_high.gif)
+<img src="https://cloud.hugot.nl/public/phpns/phpns_low_res.gif" height="600"></img>
 
 
 ## Installation
