@@ -1,7 +1,7 @@
 {
     "name": "hugot/phpns",
     "description": "Command line tool that makes working with PHP namespaces easy.",
-    "type": "project",
+    "type": "library",
     "license": "MIT",
     "authors": [
         {
@@ -9,5 +9,8 @@
             "email": "hugo.thunnissen@gmail.com"
         }
     ],
-    "require": {}
+    "require": {},
+    "config": {
+        "bin-dir": "bin"
+    }
 }
