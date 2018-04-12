@@ -1,5 +1,5 @@
 {
-    "name": "hthunnissen/phpns",
+    "name": "hugot/phpns",
     "description": "Command line tool that makes working with PHP namespaces easy.",
     "type": "project",
     "license": "MIT",
