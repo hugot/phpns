@@ -9,8 +9,6 @@
             "email": "hugo.thunnissen@gmail.com"
         }
     ],
-    "require": {},
-    "config": {
-        "bin-dir": "bin"
-    }
+    "bin": [ "bin/phpns" ],
+    "require": {}
 }
