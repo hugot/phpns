@@ -1,0 +1,13 @@
+{
+    "name": "hthunnissen/phpns",
+    "description": "Command line tool that makes working with PHP namespaces easy.",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Hugo Thunnissen",
+            "email": "hugo.thunnissen@gmail.com"
+        }
+    ],
+    "require": {}
+}
