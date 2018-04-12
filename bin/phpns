@@ -2,8 +2,23 @@
 ##
 # phpns - Resolve namespaces and fix missing use statements in your PHP scripts.
 
+##
+# Find the script itself
+##
+findSelf() (
+    cd "$(dirname "$1")"
+    declare file="$(basename "$1")"
+
+    if [[ -L $file ]]; then
+        findSelf "$(readlink "$file")"
+        return $?
+    fi
+
+    echo "$(pwd)/$file"
+)
+
 # shellcheck disable=SC2155
-declare SCRIPT_DIR="$(cd "$(dirname "$(readlink "${BASH_SOURCE[0]}" || echo "${BASH_SOURCE[0]}")")" && pwd)"
+declare SCRIPT_DIR="$(dirname "$(findSelf "${BASH_SOURCE[0]}")")"
 declare CACHE_DIR=./.cache/phpns
 declare INFO=1
 
