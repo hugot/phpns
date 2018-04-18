@@ -10,7 +10,7 @@ findUsesAndNeeds() {
 
     while read -r line; do
         [[ $line == namespace* ]] && check_uses='true'
-        if [[ $line == ?(abstract )@(class|interface|trait)* ]]; then
+        if [[ $line == ?(@(abstract|final) )@(class|interface|trait)* ]]; then
             check_uses='false' 
             check_needs='true'
             
