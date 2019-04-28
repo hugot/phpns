@@ -117,7 +117,6 @@ execute() {
             ;;
         i | index)
             handleArguments index "$@" || return $?
-            [[ -d $TREE_DIR ]] || mkdir -p "$TREE_DIR"
 
             # The arguments to grep need to be dynamic here, because the diff option
             # requires different arguments to be passed to grep.
