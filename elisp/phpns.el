@@ -1,4 +1,4 @@
-[I;; -*- lexical-binding: t; -*-
+;; -*- lexical-binding: t; -*-
 
 (require 'helm)
 (require 'helm-source)
@@ -116,49 +116,6 @@
     (dolist (fqn fqns)
       (if (and fqn (not (string= "" fqn)))
           (phpns-add-use fqn)))))
-
-(defun phpns-sort-imports ()
-  (interactive)
-  (let ((imports)
-        (sorted-imports)
-        (imports-pos)
-        (phpcbf-executable (concat (php-project-get-root-dir)  "/vendor/bin/phpcbf")))
-    (save-excursion
-      (goto-char (point-min))
-      (while (re-search-forward "^use .*$" nil t)
-        (push (match-string-no-properties 0) imports)
-        (kill-whole-line))
-
-      (setq imports-pos (point))
-
-      (let ((infile-name (make-temp-file "sort-imports")))
-
-        (with-current-buffer (find-file-noselect infile-name)
-          (insert (string-join imports "\n"))
-          (sort-lines nil (point-min) (point-max))
-          (phpns-unique-lines)
-
-          (goto-char (point-min))
-          (insert "<?php\n\n")
-
-          (save-buffer)
-
-          (with-temp-buffer
-            (call-process phpcbf-executable
-                          infile-name
-                          (current-buffer)
-                          nil)
-            (setq sorted-imports
-                  (string-join
-                   (seq-filter
-                    (lambda (line)
-                      (string-match "^use" line))
-                    (split-string (buffer-string) "\n" nil nil))
-                   "\n")))))
-
-      (goto-char imports-pos)
-      (insert (concat sorted-imports "\n")))))
-
 
 (defun phpns-unique-strings (strings)
   (seq-filter
