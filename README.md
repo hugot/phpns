@@ -5,10 +5,6 @@ and classes that are present in a directory. Using this index, Phpns can parse a
 file and add missing use statements, complete Fully Qualified Names (FQN's) of 
 namespaces and classes, and more!
 
-## Phpns in action
-<img src="https://cloud.hugot.nl/public/phpns/phpns_low_res.gif" height="600"></img>
-
-
 ## Installation
 
 ### With basher
@@ -98,6 +94,33 @@ format, this might prove useful if you are interested in integrating phpns with 
 Other commands will output data in a format that should be reasonably easy to parse, but if you do
 run into problems with that, please do not hesitate to open an issue or maybe even open a pull request
 so we can fix that problem for you.
+
+### Emacs plugin
+There is a small emacs plugin included in the "elisp" directory of
+this repository. Just add it to your loadpath and use it with the
+following (or similar) settings:
+
+```elisp
+(require 'phpns)
+
+(global-set-key (kbd "C-c c") 'phpns-helm)
+
+;; Inside your php-mode hook:
+(define-key php-mode-map (kbd "C-c u") 'phpns-fix-uses-interactive)
+```
+
+More elaborate example:
+
+```elisp
+(require 'phpns)
+
+(global-set-key (kbd "C-c c") 'phpns-helm)
+
+(defun my-php-mode-hook ()
+    (define-key php-mode-map (kbd "C-c u") 'phpns-fix-uses-interactive))
+
+(add-hook 'php-mode-hook 'my-php-mode-hook)
+```
 
 ### BASH Completion functions
 If phpns has been installed correctly on your system, the completion functions in the `completions` directory of this repository
