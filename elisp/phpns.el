@@ -10,9 +10,8 @@
        (interactive)
        (save-buffer)
        (let ((phpns-json (shell-command-to-string
-			  (format "cd %s && %s/.basher/cellar/bin/phpns fxu --json %s"
+			  (format "cd %s && phpns fxu --json %s"
 				  (php-project-get-root-dir)
-				  (getenv "HOME")
 				  buffer-file-name))))
 	 (let* ((json-object-type 'hash-table)
 		(json-array-type 'list)
